@@ -19,7 +19,27 @@ R.<x> = PolynomialRing(GF(7))
 f = x^3 + 3*x + 2  # primitive
 print(is_prim_pol(f, 7))
 
+def is_prim_pol(f, p):
+    """
+    is pol irreducible and primitive?
+    """
+    Fp = GF(p)
+    R = PolynomialRing(Fp, 'x'); x = R.gen()
+    m = f.degree()
+
+    if not f.is_irreducible():
+        return False
+
+    K.<a> = GF(p**m, modulus=f)
+
+    return a.multiplicative_order() == p**m - 1
+
+R.<x> = PolynomialRing(GF(7))
+f = x^3 + 3*x + 2  # primitive
+print(is_prim_pol(f, 7))
+
 def unram_pol_jr(m, p):
+    # returns primitive polynomial of degree m over F_p
     RZ = PolynomialRing(ZZ, 'x'); x = RZ.gen()
     pol = x**m
 
@@ -27,26 +47,25 @@ def unram_pol_jr(m, p):
     while not done:
         j = 0
         s = 1
-        
+        # "increment coefficients"
         while pol[j] == (p-1)*s:
             pol -= s*(p-1)*x**j
             s = -s
             j += 1
         pol += s*x**j
 
+        # reduce mod p
         R = PolynomialRing(GF(p), 'x'); xp = R.gen()
-        pol_mod_p = R([c % p for c in pol.list()]) # coefs mod p
+        pol_mod_p = R([c % p for c in pol.list()])
 
-        if pol_mod_p.is_irreducible():
-            K.<alpha> = GF(p**m, modulus=pol_mod_p)
-            if alpha.is_primitive():
-                done = True
+        # check primitivity from prev function
+        if is_prim_pol(pol_mod_p, p):
+            done = True
 
     return pol_mod_p
 
 pol = unram_pol_jr(3, 5)
 print(pol)
-
 
 def conway_or_jr_polynomial(K, n):
     if K == K.prime_subfield():
