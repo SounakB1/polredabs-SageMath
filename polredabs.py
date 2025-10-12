@@ -19,25 +19,6 @@ R.<x> = PolynomialRing(GF(7))
 f = x^3 + 3*x + 2  # primitive
 print(is_prim_pol(f, 7))
 
-def is_prim_pol(f, p):
-    """
-    is pol irreducible and primitive?
-    """
-    Fp = GF(p)
-    R = PolynomialRing(Fp, 'x'); x = R.gen()
-    m = f.degree()
-
-    if not f.is_irreducible():
-        return False
-
-    K.<a> = GF(p**m, modulus=f)
-
-    return a.multiplicative_order() == p**m - 1
-
-R.<x> = PolynomialRing(GF(7))
-f = x^3 + 3*x + 2  # primitive
-print(is_prim_pol(f, 7))
-
 def unram_pol_jr(m, p):
     # returns primitive polynomial of degree m over F_p
     RZ = PolynomialRing(ZZ, 'x'); x = RZ.gen()
