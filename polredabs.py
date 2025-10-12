@@ -108,7 +108,7 @@ def residue_factor(phi, p):
 
 R.<x> = PolynomialRing(GF(7))
 phi = (x^2 + 3*x + 5)^2
-nu = residue_factor(phi)
+nu = residue_factor(phi,7)
 print(phi, nu)
 
 def is_eisenstein_form(phi, p):
