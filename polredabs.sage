@@ -536,7 +536,7 @@ def Contraction(L, nu):
     return sum(L[i] * nu**i for i in range(len(L)))
 
 
-# Inner Function for ResPolyDistinguished
+# Helper Function for ResPolyDistinguished, constant_first from the function
 
 def residual_polynomial_distinguished_sub(thisphi, constant_first=constant_first):
     if constant_first:
