@@ -491,3 +491,67 @@ def PolynomialCompareLog(f, g):
         elif a != 0 and b != 0 and a != b:
             return discrete_log(a) - discrete_log(b)
     return 0
+
+def ResidualPolynomialCompare(A, B):
+    """
+    Return 1 if A > B, -1 if A < B, 0 otherwise.
+
+    EXAMPLES:
+
+    sage: R.<x> = PolynomialRing(GF(7))
+
+    sage: A = [x^2 + 3*x + 1, x^3 + 2]
+    sage: B = [x^2 + 3*x + 1, x^3 + 3]
+
+    sage: print(ResidualPolynomialCompare(A,B))
+    """
+
+    if len(A) != len(B):
+        raise ValueError("ResidualPolynomialCompare: Lists of residual polynomials must be of the same length.")
+
+    for a, b in zip(A, B):
+        c = PolynomialCompareLog(a, b)
+        if c != 0:
+            return c
+
+    return 0
+
+def Expansion(f, nu):
+    """
+    The coefficients of the nu-expansion of f as a list.
+    """
+    expansion = []
+    while f != 0:
+        a = f % nu
+        expansion.append(a)
+        f = (f - a) // nu
+    return expansion
+
+
+def Contraction(L, nu):
+    """
+    Given list L = [a0, a1, ..., ak] of coefficients
+    and polynomial nu, reconstruct poly.
+    """
+    return sum(L[i] * nu**i for i in range(len(L)))
+
+
+# Inner Function for ResPolyDistinguished
+
+def residual_polynomial_distinguished_sub(thisphi, constant_first=constant_first):
+    if constant_first:
+        phi0 = thisphi.coefficient(0)
+        try:
+            phi01 = KtoFq(phi0 // piK)  
+        except Exception:
+            phi01 = KtoFq(phi0 / piK)
+        a = discrete_log(phi01)  
+        y = Integer(thisphi.degree())
+        d, s0, _ = xgcd(y, q - 1)
+        k = Integer(a) // Integer(d)
+        t0 = Integer((-s0 * k) % (q - 1))
+        Delta = Integer((q - 1) // d)
+        x_base = [Integer(t0)]
+    else:
+        Delta = Integer(1)
+        x_base = [Integer(0)]
