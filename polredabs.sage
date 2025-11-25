@@ -535,23 +535,184 @@ def Contraction(L, nu):
     """
     return sum(L[i] * nu**i for i in range(len(L)))
 
+def ResidualPolynomialDistinguished(phi, conjugates=False, constant_first=True):
+    """
+    The distinguished (minimal) representative of the residual polynomial class of an Eisenstein polynomial phi
+along with the Eisenstein polynomials that yield the distinguished representative.
+    """
+    if not is_eisenstein_form(phi):
+        conjugates = True
+        ef = EisensteinForm_simple(phi)
+        if isinstance(ef, (list, tuple)):
+            phi = ef[0]
+        else:
+            phi = ef
 
-# Helper Function for ResPolyDistinguished, constant_first from the function
+    # Basic rings/fields
+    K = phi.base_ring()
+    p = K.prime()
+    Kx = phi.parent()
+    e = phi.degree()
 
-def residual_polynomial_distinguished_sub(thisphi, constant_first=constant_first):
-    if constant_first:
-        phi0 = thisphi.coefficient(0)
-        try:
-            phi01 = KtoFq(phi0 // piK)  
-        except Exception:
-            phi01 = KtoFq(phi0 / piK)
-        a = discrete_log(phi01)  
-        y = Integer(thisphi.degree())
-        d, s0, _ = xgcd(y, q - 1)
-        k = Integer(a) // Integer(d)
-        t0 = Integer((-s0 * k) % (q - 1))
-        Delta = Integer((q - 1) // d)
-        x_base = [Integer(t0)]
+    L = K.extension(phi, names=('alpha',))
+    alpha = L.gen()
+
+    rp, rho = RamificationPoly(phi, alpha)
+
+    slopes = list(reversed([-m for m in LowerSlopes(rp)]))
+    vertices = list(reversed(LowerVertices(rp)))
+
+    Fq, KtoFq = K.residue_field()
+
+    Fqz = PolynomialRing(Fq, 'z')
+    z = Fqz.gen()
+    q = Integer(Fq.cardinality())
+
+    xi = Fq.multiplicative_generator()
+
+    if Integer(phi.degree()) % Integer(p) != 0:
+        A = ResidualPolynomial(phi, Kx.gen(), alpha)
+        return A, [phi]
+
+    def residual_polynomial_distinguished_sub(phi, constant_first=True):
+
+        K = phi.base_ring()
+        piK = K.uniformizer()
+
+        Fq, KtoFq = K.residue_field()
+        q = Fq.cardinality()
+
+        #  constant_first branch
+        if constant_first:
+            phi0 = phi.constant_coefficient()
+            phi01 = KtoFq(phi0 / piK) # residue
+            a = discrete_log(phi01)        
+
+            e = K.ramification_index()
+            d, s0, _ = xgcd(e, q-1)
+
+            k = a // d
+            b = a % d
+
+            t0 = (-s0 * k) % (q - 1)       
+            Delta = (q - 1) // d
+            x_base = [t0]
+
+        else:
+            Delta = 1
+            x_base = [0]
+
+        # Ramified Extensions
+        L = K.extension(phi, names=('alpha',))
+        alpha = L.gen()
+        LX = PolynomialRing(L, 'X')
+        X = LX.gen()
+
+        rp, _ = RamificationPoly(phi, alpha)
+
+        slopes = list(reversed([-m for m in LowerSlopes(rp)]))
+        vertices = list(reversed(LowerVertices(rp)))
+        A = ResidualPolynomial(phi, L['x'].gen(), alpha)
+
+        g = 0
+
+        # Main loop
+        for idx in range(len(slopes)):
+            m = slopes[idx]
+            n = A[idx].degree()
+
+            t = m.numerator()
+            d = m.denominator()
+
+            g = g + (d - t) * n
+
+            
+            for j in range(n, -1, -1):
+
+                Aij = A[idx].coefficients(sparse=False)[j] if j <= n else 0
+
+                if Aij != 0:
+                    a = discrete_log(Aij) % (q - 1)
+
+                    D = (Delta * ((t - d) * j + g)) % (q - 1)
+
+                    if D != 0:
+                        b, s, _ = xgcd(D, q - 1)
+
+                        new_Delta = lcm(Delta, (q - 1) // b)
+                        minexp = q # big 
+                        new_x_base = []
+
+                        for xij in x_base:
+                            J = a + xij * ((t - d) * j + g)
+                            r = J % b
+                            k = J // b
+
+                            x = (xij - k * s * Delta) % (q - 1)
+
+                            if r < minexp:
+                                minexp = r
+                                new_x_base = [x]
+                            elif r == minexp:
+                                new_x_base.append(x)
+
+                        Delta = new_Delta
+                        x_base = new_x_base
+
+        return x_base, Delta
+
+    def residual_polynomial_phis(thisphi, s_base, s_diff):
+        minphis = []
+        deg = thisphi.degree()
+        for sb in s_base:
+            s = Integer(sb)
+            # repeat loop until cycle returns to sb
+            while True:
+                s = Integer((s + s_diff) % Integer(q - 1))
+                deltaK = K(xi ** Integer(s))
+                coeffs = [thisphi.coefficient(i) * (deltaK ** (deg - i)) for i in range(0, deg + 1)]
+                phidelta = Kx(coeffs)
+                minphis.append((ResidualPolynomial(phidelta, Kx.gen(), alpha), phidelta))
+                if s == sb:
+                    break
+        return minphis    
+    
+    As = []
+    if not conjugates:
+        base, delta = residual_polynomial_distinguished_sub(phi, constant_first=constant_first)
+        As = residual_polynomial_phis(phi, base, delta)
     else:
-        Delta = Integer(1)
-        x_base = [Integer(0)]
+        As = []
+        auts = K.automorphisms()
+        aut_maps = auts
+
+        for tau in aut_maps:
+            # apply automorphism tau to coefficients of phi
+            tauphi = Kx([tau(c) for c in phi.coefficients(sparse=False)])
+            base, delta = residual_polynomial_distinguished_sub(tauphi, constant_first=constant_first)
+            As += residual_polynomial_phis(tauphi, base, delta)
+        
+        def cmp_as(a, b): # Slight modification of respolycompare for coeffs
+            return int(ResidualPolynomialCompare(a[0], b[0]))
+
+        As.sort(key=cmp_to_key(cmp_as))
+    
+    if len(As) == 0:
+        return None, []
+    
+    target_respoly = As[0][0]
+    philogs = []
+    for a_res, a_phi in As:
+        if a_res == target_respoly:
+            const_div = a_phi.constant_coefficient() / piK
+            mapped = KtoFq(const_div)
+            philogs.append((Integer(discrete_log(mapped)), a_phi))
+
+    if len(philogs) == 0: # special case if all res polys equal
+        phis = [a_phi for (a_res, a_phi) in As if a_res == target_respoly]
+        return target_respoly, phis
+
+    minlog = min(pl[0] for pl in philogs)
+    phis = [pl[1] for pl in philogs if pl[0] == minlog]
+
+    return target_respoly, phis
