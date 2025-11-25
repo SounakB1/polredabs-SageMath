@@ -519,6 +519,12 @@ def ResidualPolynomialCompare(A, B):
 def Expansion(f, nu):
     """
     The coefficients of the nu-expansion of f as a list.
+
+    EXAMPLES:
+
+    sage: f = 123
+    sage: nu = 10
+    sage: print(Expansion(f,nu))
     """
     expansion = []
     while f != 0:
@@ -532,6 +538,12 @@ def Contraction(L, nu):
     """
     Given list L = [a0, a1, ..., ak] of coefficients
     and polynomial nu, reconstruct poly.
+
+    EXAMPLES:
+
+    sage: L = [3, 2, 1]
+    sage: nu = 10
+    sage: print(Contraction(L,nu))
     """
     return sum(L[i] * nu**i for i in range(len(L)))
 
