@@ -516,37 +516,6 @@ def ResidualPolynomialCompare(A, B):
 
     return 0
 
-def Expansion(f, nu):
-    """
-    The coefficients of the nu-expansion of f as a list.
-
-    EXAMPLES:
-
-    sage: f = 123
-    sage: nu = 10
-    sage: print(Expansion(f,nu))
-    """
-    expansion = []
-    while f != 0:
-        a = f % nu
-        expansion.append(a)
-        f = (f - a) // nu
-    return expansion
-
-
-def Contraction(L, nu):
-    """
-    Given list L = [a0, a1, ..., ak] of coefficients
-    and polynomial nu, reconstruct poly.
-
-    EXAMPLES:
-
-    sage: L = [3, 2, 1]
-    sage: nu = 10
-    sage: print(Contraction(L,nu))
-    """
-    return sum(L[i] * nu**i for i in range(len(L)))
-
 def ResidualPolynomialDistinguished(phi, conjugates=False, constant_first=True):
     """
     The distinguished (minimal) representative of the residual polynomial class of an Eisenstein polynomial phi
@@ -728,3 +697,161 @@ along with the Eisenstein polynomials that yield the distinguished representativ
     phis = [pl[1] for pl in philogs if pl[0] == minlog]
 
     return target_respoly, phis
+
+def Expansion(f, nu):
+    """
+    The coefficients of the nu-expansion of f as a list.
+
+    EXAMPLES:
+
+    sage: f = 123
+    sage: nu = 10
+    sage: print(Expansion(f,nu))
+    """
+    expansion = []
+    while f != 0:
+        a = f % nu
+        expansion.append(a)
+        f = (f - a) // nu
+    return expansion
+
+
+def Contraction(L, nu):
+    """
+    Given list L = [a0, a1, ..., ak] of coefficients
+    and polynomial nu, reconstruct poly.
+
+    EXAMPLES:
+
+    sage: L = [3, 2, 1]
+    sage: nu = 10
+    sage: print(Contraction(L,nu))
+    """
+    return sum(L[i] * nu**i for i in range(len(L)))
+
+def IsMono(f):
+    """
+    True if the polynomial f is a monomial.
+
+    EXAMPLES: 
+
+    sage: R.<x> = PolynomialRing(QQ)
+    sage: f = 3*x^2
+    sage: print(IsMono(f))
+    """
+
+    R = f.parent().base_ring()
+    coeffs = f.list()
+    mono = (sum(1 for a in coeffs if a != 0) == 1)
+
+    if not mono:
+        return False
+
+    if R is R.base_ring():
+        return True
+
+    coeff = sum(coeffs)
+    listcoeff = coeff.list()
+    ret = (sum(1 for a in listcoeff if a != 0) == 1)
+
+    return ret
+
+def Expansion2(f, nu, limit=0):
+    """
+    The nu-expansion of f such that its coefficients are given as p expansions and the nu-expansion of f.
+
+    EXAMPLES:
+
+    sage: Qp5 = Qp(5, prec=6)
+    sage: Qp5.prime = lambda: 5
+    sage: Qp5.precision = lambda: 6
+    sage: R.<x> = PolynomialRing(Qp5)
+    sage: f = 3+5*x+25*x^2
+    sage: nu = x
+    sage: Expansion2(f, nu)
+
+    """
+
+    K = f.parent().base_ring()
+    if limit == 0:
+        limit = K.precision()
+
+    Zx = PolynomialRing(ZZ, 'x')
+
+    nuexp = Expansion(f, nu)
+
+    p = K.prime()
+
+    if nu.degree() > 1:
+        expansion = [Zx(a) for a in nuexp]
+    else:
+        expansion = [Zx(a.constant_coefficient().list()) for a in nuexp]
+
+    expexp = []
+
+    for g in expansion:
+        h = g
+        gel = []
+        c = 0
+
+        while (h != 0) and (c <= limit):
+            gel.append(h % p)
+            h = h // p     # integer division
+            c += 1
+
+        expexp.append(gel)
+
+    maxlen = max(max(len(gel) for gel in expexp), limit)
+
+    for i in range(len(expexp)):
+        expexp[i] = expexp[i] + [0] * (maxlen - len(expexp[i]) + 1)
+
+    return expexp, nuexp
+
+def Contraction2(L, nu):
+    """
+    Contraction2(Expansion2(f,nu),nu) = f
+
+    EXAMPLES:
+
+    sage: R.<x> = PolynomialRing(Qp(3,8))
+    sage: nu = x
+    sage: L = [[2], [1,1], [0,0,1]]
+    sage: print(Contraction2(L, nu))
+    """
+
+    Rx = nu.parent()
+    R = Rx.base_ring()
+    p = R.prime()
+
+    # Coefs ints
+    if R == R.prime_subring():
+        return Rx(sum(sum((p**(j) * L[i][j] for j in range(len(L[i])))) * nu**i for i in range(len(L))))
+
+    # Degree(nu) = 1, coefficients polys
+    if nu.degree() == 1:
+        coeffs = []
+        for i in range(len(L)):
+            c = sum(p**j * L[i][j](R.gen()) for j in range(len(L[i])))
+            coeffs.append(c)
+        return Rx(coeffs)
+
+def RamificationPoly(phi, alpha):
+    """
+    Absolute ramification polygon and polynomial phi(alpha+x) of a polynomial phi in Eisenstein form, where alpha is a root of phi
+
+    sage: K = Qp(5, 20)
+    sage: R.<x> = PolynomialRing(K)
+    sage: phi = x^3 + 5*x + 5      
+    sage: alpha = phi.roots()[0][0]   
+    sage: RamificationPoly(phi, alpha)
+    """
+
+    L = alpha.parent()
+    Lx = PolynomialRing(L, 'x')
+    x = Lx.gen()
+
+    rho = Lx(phi)(x + alpha)
+    ramification_polygon = rho.newton_polygon()
+
+    return ramification_polygon, rho
