@@ -12,16 +12,15 @@ def is_prim_pol(f, p):
         sage: R.<x> = PolynomialRing(GF(7))
         
         sage: f = x^3 + 3*x + 2  # primitive
-        sage: is_prim_pol(f, 7)
+        sage: is_prim_pol(f, 7) # True
 
         sage: f = x^2 + 3 # reducible
-        sage: is_prim_pol(f, 7)
+        sage: is_prim_pol(f, 7) # False
 
         sage: f = x^2 + 1 # irreducible but not primitive
+        sage: is_prim_pol(f, 7) # False
     """
     Fp = GF(p)
-    R = PolynomialRing(Fp, 'x')
-    x = R.gen()
     m = f.degree()
 
     if not f.is_irreducible():
@@ -31,12 +30,14 @@ def is_prim_pol(f, p):
 
     return a.multiplicative_order() == p**m - 1
 
-def unram_pol_jr(m, p):
+def unram_pol_jr(m, p): # way too slow? O(p^m) runtime
     """
     TESTS:
-
         sage: pol = unram_pol_jr(3, 5)
-        sage: pol
+        sage: pol # x^3 + 4 * x + 2
+
+        sage: pol = unram_pol_jr(8, 13)
+        sage: pol # takes too long to run
 
     """
     # returns primitive polynomial of degree m over F_p
@@ -44,11 +45,10 @@ def unram_pol_jr(m, p):
     x = RZ.gen()
     pol = x**m
 
-    done = False
-    while not done:
+    while True:
         j = 0
         s = 1
-        # "increment coefficients"
+        # increment coefficients
         while pol[j] == (p-1)*s:
             pol -= s*(p-1)*x**j
             s = -s
@@ -62,18 +62,22 @@ def unram_pol_jr(m, p):
 
         # check primitivity from prev function
         if is_prim_pol(pol_mod_p, p):
-            done = True
+            return pol_mod_p
 
     return pol_mod_p
 
 def conway_or_jr_polynomial(K, n):
     """
-    Return a Conway (or fallback JR) polynomial of degree n.
+    Return a Conway polynomial of degree n.
 
     EXAMPLES:
         sage: K = GF(7)
         sage: pol = conway_or_jr_polynomial(K, 3)
-        sage: pol
+        sage: pol # x^3 + 6*x^2 + 4
+
+        sage: K2 = GF(11)
+        sage: pol = conway_or_jr_polynomial(K,4)
+        sage: pol # x^4 + 8*x^2 + 10*x + 2
     """
     p = K.characteristic()
     F = GF(p**n, name='a')
@@ -86,35 +90,50 @@ def residue_factor(phi, p):
         sage: R.<x> = PolynomialRing(GF(7))
         sage: phi = (x^2 + 3*x + 5)^2
         sage: nu = residue_factor(phi,7)
-        sage: phi, nu
+        sage: phi, nu # (x^4 + 6*x^3 + 5*x^2 + 2*x + 4, x^2 + 3*x + 5)
+
+        sage: R.<x> = PolynomialRing(GF(11))
+        sage: phi = x^3 + 4*x + 6 # not a power of irreducible polynomial
+        sage: nu = residue_factor(phi, 11)
+        sage: phi, nu # (x^3 + 4*x + 6, 'Phi is not a power of an irreducible polynomial.')
+
+        sage: R.<x> = PolynomialRing(GF(3))
+        sage: phi = (x^2 + x + 1)^2 # x^2 + x + 1 = (x+2)^2 is power of irreducible polynomial
+        sage: nu = residue_factor(phi, 3)
+        sage: phi, nu # (x^4 + 2*x^3 + 2*x + 1, x + 2)
+
+        sage: R.<x> = PolynomialRing(GF(3))
+        sage: phi = (x^2 + 2)^2 # x^2 + 2 is reducible and not power of deg 1 poly
+        sage: nu = residue_factor(phi, 3)
+        sage: phi, nu # (x^4 + x^2 + 1, 'Phi is not a power of an irreducible polynomial.')
+
+        sage: R.<x> = PolynomialRing(GF(13))
+        sage: phi = 13*x^5 + 26*x + 13 # 0 poly
+        sage: nu = residue_factor(phi, 13)
+        sage: phi, nu # (0, 'The inputted polynomial is 0.')
     """
     RZ = phi.parent()
     Fp = GF(p)
-
-
-    #Rp = PolynomialRing(QQ, 'x')
-    #x = R.gen(0)
 
     Rp.<x> = PolynomialRing(Fp)
     coeffs_mod_p = [c % p for c in phi.list()]
     Rphi = Rp(coeffs_mod_p)
 
     if Rphi.is_zero():
-        return 0
+        return "The inputted polynomial is 0."
 
     facs = Rphi.factor()
     if len(facs) != 1:
-        return 0
+        return "Phi is not a power of an irreducible polynomial."
 
-    nu = facs[0][0] #irreducible
+    nu = facs[0][0]  # irreducible factor mod p
 
-    RZ.<X> = PolynomialRing(ZZ)
-    lifted = RZ([int(c) for c in nu.list()])
+    lifted = RZ([ZZ(c) for c in nu.list()])
 
     return lifted
 
 
-def is_eisenstein_form(phi):
+def is_eisenstein_form(phi): # * fix function must include nu, not checking if eisenstein but rather eisenstein form
     """
     sage vers of Magma's IsEisensteinForm
 
@@ -132,13 +151,40 @@ def is_eisenstein_form(phi):
         sage: phi = x^6 + 246*x^4 + 84*x + 30
         sage: is_eisenstein_form(phi, 3)
     """
-    K = phi.base_ring()
     R = phi.parent()
-    coef = phi.list()
-    p = K.uniformizer()
-    
-    if (not phi.is_monic()) or any(c % p == 0 for c in coef[:-1]) or coef[0] % (p**2) == 0:
+    K = R.base_ring()
+
+    if not hasattr(K, "prime"):
         return False
+
+    p = K.prime()  
+
+    nu = residue_factor(phi, p)
+    if nu == 0:
+        return False
+
+    if nu.leading_coefficient() != 1:
+        return False
+
+    # expansion of phi in powers of nu
+    g = phi
+    nuexp = []
+    while True:
+        q, r = g.quo_rem(nu)
+        nuexp.append(r)
+        if q == 0:
+            break
+        g = q
+
+    coeffs0 = nuexp[0].coefficients()
+    vals0 = [valuation(a, p) for a in coeffs0 if a != 0]
+    if len(vals0) == 0 or min(vals0) != 1:
+        return False
+        
+    for i in range(1, len(nuexp)):
+        for a in nuexp[i].coefficients():
+            if a != 0 and valuation(a, p) < 1:
+                return False
 
     return True
 
