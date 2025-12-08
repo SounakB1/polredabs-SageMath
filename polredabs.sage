@@ -80,8 +80,10 @@ def conway_or_jr_polynomial(K, n):
         sage: pol # x^4 + 8*x^2 + 10*x + 2
     """
     p = K.characteristic()
-    F = GF(p**n, name='a')
-    return F.modulus().change_ring(K)
+    try:
+        return conway_polynomial(p, n)
+    except Exception:
+        return unram_pol_jr(n, p)
 
 def residue_factor(phi, p):
     """
