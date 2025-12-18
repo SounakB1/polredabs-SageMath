@@ -12,13 +12,16 @@ def is_prim_pol(f, p):
         sage: R.<x> = PolynomialRing(GF(7))
         
         sage: f = x^3 + 3*x + 2  # primitive
-        sage: is_prim_pol(f, 7) # True
+        sage: is_prim_pol(f, 7) 
+        True
 
         sage: f = x^2 + 3 # reducible
-        sage: is_prim_pol(f, 7) # False
+        sage: is_prim_pol(f, 7) 
+        False
 
         sage: f = x^2 + 1 # irreducible but not primitive
-        sage: is_prim_pol(f, 7) # False
+        sage: is_prim_pol(f, 7) 
+        False
     """
     Fp = GF(p)
     m = f.degree()
@@ -30,15 +33,16 @@ def is_prim_pol(f, p):
 
     return a.multiplicative_order() == p**m - 1
 
-def unram_pol_jr(m, p): # way too slow? O(p^m) runtime
+def unram_pol_jr(p, m): # way too slow? O(p^m) runtime (fixed, also switch p and m)
     """
     TESTS:
-        sage: pol = unram_pol_jr(3, 5)
-        sage: pol # x^3 + 4 * x + 2
+        sage: pol = unram_pol_jr(5, 3)
+        sage: pol 
+        x^3 + 4 * x + 2
 
-        sage: pol = unram_pol_jr(8, 13)
-        sage: pol # takes too long to run
-
+        sage: pol = unram_pol_jr(13, 8)
+        sage: pol 
+        x^8 + 4*x^2 + 12*x + 6
     """
     # returns primitive polynomial of degree m over F_p
     RZ = PolynomialRing(ZZ, 'x')
@@ -64,26 +68,28 @@ def unram_pol_jr(m, p): # way too slow? O(p^m) runtime
         if is_prim_pol(pol_mod_p, p):
             return pol_mod_p
 
-    return pol_mod_p
+    return pol_mod_p 
 
-def conway_or_jr_polynomial(K, n):
+def conway_or_jr_polynomial(K, n): # fix the signature for p instead of K
     """
     Return a Conway polynomial of degree n.
 
     EXAMPLES:
         sage: K = GF(7)
         sage: pol = conway_or_jr_polynomial(K, 3)
-        sage: pol # x^3 + 6*x^2 + 4
+        sage: pol 
+        x^3 + 6*x^2 + 4
 
         sage: K2 = GF(11)
-        sage: pol = conway_or_jr_polynomial(K,4)
-        sage: pol # x^4 + 8*x^2 + 10*x + 2
+        sage: pol = conway_or_jr_polynomial(K2,4)
+        sage: pol 
+        x^4 + 8*x^2 + 10*x + 2  
     """
     p = K.characteristic()
     try:
         return conway_polynomial(p, n)
     except Exception:
-        return unram_pol_jr(n, p)
+        return unram_pol_jr(p, n)
 
 def residue_factor(phi, p):
     """
@@ -92,27 +98,32 @@ def residue_factor(phi, p):
         sage: R.<x> = PolynomialRing(GF(7))
         sage: phi = (x^2 + 3*x + 5)^2
         sage: nu = residue_factor(phi,7)
-        sage: phi, nu # (x^4 + 6*x^3 + 5*x^2 + 2*x + 4, x^2 + 3*x + 5)
+        sage: phi, nu 
+        (x^4 + 6*x^3 + 5*x^2 + 2*x + 4, x^2 + 3*x + 5)
 
         sage: R.<x> = PolynomialRing(GF(11))
         sage: phi = x^3 + 4*x + 6 # not a power of irreducible polynomial
         sage: nu = residue_factor(phi, 11)
-        sage: phi, nu # (x^3 + 4*x + 6, 'Phi is not a power of an irreducible polynomial.')
+        sage: phi, nu 
+        (x^3 + 4*x + 6, 'Phi is not a power of an irreducible polynomial.')
 
         sage: R.<x> = PolynomialRing(GF(3))
         sage: phi = (x^2 + x + 1)^2 # x^2 + x + 1 = (x+2)^2 is power of irreducible polynomial
         sage: nu = residue_factor(phi, 3)
-        sage: phi, nu # (x^4 + 2*x^3 + 2*x + 1, x + 2)
+        sage: phi, nu 
+        (x^4 + 2*x^3 + 2*x + 1, x + 2)
 
         sage: R.<x> = PolynomialRing(GF(3))
         sage: phi = (x^2 + 2)^2 # x^2 + 2 is reducible and not power of deg 1 poly
         sage: nu = residue_factor(phi, 3)
-        sage: phi, nu # (x^4 + x^2 + 1, 'Phi is not a power of an irreducible polynomial.')
+        sage: phi, nu 
+        (x^4 + x^2 + 1, 'Phi is not a power of an irreducible polynomial.')
 
         sage: R.<x> = PolynomialRing(GF(13))
         sage: phi = 13*x^5 + 26*x + 13 # 0 poly
         sage: nu = residue_factor(phi, 13)
-        sage: phi, nu # (0, 'The inputted polynomial is 0.')
+        sage: phi, nu 
+        (0, 'The inputted polynomial is 0.')
     """
     RZ = phi.parent()
     Fp = GF(p)
@@ -137,14 +148,14 @@ def residue_factor(phi, p):
 
 def is_eisenstein_form(phi): # * fix function must include nu, not checking if eisenstein but rather eisenstein form
     """
-    sage vers of Magma's IsEisensteinForm
+    True, if phi is in Eisenstein form.  If Conway is true the irreducible factor of phi in GF(p) must be a Conway polynomial.
 
     EXAMPLES:
-
         sage: K = Qp(5)
         sage: R.<x> = K[]
         sage: phi = x^4 + x^3 + x^2 + x + 1
-        sage: is_eisenstein_form(phi, 5) # should be yes
+        sage: is_eisenstein_form(phi) 
+        False
 
         # from polredabs.m
 
@@ -152,6 +163,7 @@ def is_eisenstein_form(phi): # * fix function must include nu, not checking if e
         sage: R.<X> = K[]
         sage: phi = x^6 + 246*x^4 + 84*x + 30
         sage: is_eisenstein_form(phi, 3)
+        True
     """
     R = phi.parent()
     K = R.base_ring()
@@ -162,30 +174,23 @@ def is_eisenstein_form(phi): # * fix function must include nu, not checking if e
     p = K.prime()  
 
     nu = residue_factor(phi, p)
-    if nu == 0:
+    if isinstance(nu, str):
         return False
 
     if nu.leading_coefficient() != 1:
         return False
 
     # expansion of phi in powers of nu
-    g = phi
-    nuexp = []
-    while True:
-        q, r = g.quo_rem(nu)
-        nuexp.append(r)
-        if q == 0:
-            break
-        g = q
+    nuexp = Expansion(phi, nu)
 
     coeffs0 = nuexp[0].coefficients()
-    vals0 = [valuation(a, p) for a in coeffs0 if a != 0]
+    vals0 = [a.valuation() for a in coeffs0]
     if len(vals0) == 0 or min(vals0) != 1:
         return False
         
     for i in range(1, len(nuexp)):
         for a in nuexp[i].coefficients():
-            if a != 0 and valuation(a, p) < 1:
+            if a.valuation() < 1:
                 return False
 
     return True
@@ -202,6 +207,7 @@ def eisenstein_form(L, K):
         sage: L.<a> = K.extension(f)
         sage: phi, nu, gamma = eisenstein_form(L, K)
         sage: phi, nu, gamma, phi(gamma)
+        ((1 + O(5^5))*x^2 + O(5^6)*x + 4*5 + 4*5^2 + 4*5^3 + 4*5^4 + 4*5^5 + O(5^6), (1 + O(5^5))*x, a + O(a^11), O(a^12))
     """
     R = PolynomialRing(L, 't')
     t = R.gen()
@@ -762,7 +768,6 @@ def Expansion(f, nu):
         expansion.append(a)
         f = (f - a) // nu
     return expansion
-
 
 def Contraction(L, nu):
     """
