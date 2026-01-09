@@ -311,8 +311,14 @@ def ramification_poly_raw(phi, alpha):
     phi_L = Lx(phi)
 
     rho = phi_L(x + alpha)
+    xpow = rho.valuation()
 
-    ramification_polygon = rho.newton_polygon()
+    # shift, since newton_polygon wants something with nonzero constant term
+    ramification_polygon = (rho >> xpow).newton_polygon()
+    if xpow != 0:
+        # Need to shift back
+        from sage.geometry.newton_polygon import NewtonPolygon
+        ramification_polygon = NewtonPolygon([(x+xpow,y) for (x,y) in ramification_polygon.vertices()])
 
     return ramification_polygon, rho
 
@@ -381,7 +387,7 @@ def ResidualPolynomialOfComponentAbs(phi, nu, alpha, m): # Precision error
     X = LX.gen()
 
     nualpha = nu(alpha)
-    rhom = rho.subs(X=nualpha**m * X)
+    rhom = rho.subs(x=nualpha**(m+1) * X)
 
     # Min valuation
     coeffs = rhom.list()
