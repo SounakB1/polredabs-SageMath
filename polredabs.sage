@@ -425,7 +425,7 @@ def ResidualPolynomialOfComponentAbs(phi, nu, alpha, m): # Precision error
     X = LX.gen()
 
     nualpha = nu(alpha)
-    rhom = rho.subs(X=nualpha**(m+1) * X)
+    rhom = rho.subs(x=nualpha**(m+1) * X)
 
     # Min valuation
     coeffs = rhom.list()
