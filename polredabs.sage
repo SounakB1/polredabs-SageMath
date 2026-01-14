@@ -323,7 +323,7 @@ def EisensteinForm_simple(f):
     K = f.base_ring()
     return EisensteinForm_poly(f, K)
 
-def ramification_poly_raw(phi, alpha): 
+def ramification_poly_raw(phi, alpha):
     # rho:=phi(alpha+x) and the Newton polygon of rho
     L = alpha.parent()
 
@@ -335,47 +335,51 @@ def ramification_poly_raw(phi, alpha):
     rho = phi_L(x + alpha)
     xpow = rho.valuation()
 
-    ramification_polygon
-    rho >>= xpow
-
-    ramification_polygon = rho.newton_polygon() << xpow
-    # shift back
+    # shift, since newton_polygon wants something with nonzero constant term
+    ramification_polygon = (rho >> xpow).newton_polygon()
+    if xpow != 0:
+        # Need to shift back
+        from sage.geometry.newton_polygon import NewtonPolygon
+        ramification_polygon = NewtonPolygon([(x+xpow,y) for (x,y) in ramification_polygon.vertices()])
 
     return ramification_polygon, rho
 
-def RamificationPoly(phi, alpha, nu=None):
+def RamificationPoly(phi, nu, alpha): # Fixed
     """
-    Return the ramification polynomial of phi at alpha.
-
-    TESTS:
-
-    sage: K = Qp(5, 20, print_mode="val-unit")                
-    sage: R.<x> = K[]
-    sage: phi = x^2 + 1
-    sage: alpha = K(2)                  
-    sage: rp, rho = RamificationPoly(phi, alpha)
-
-    sage: print("rho:", rho)
-    rho: (1 + O(5^20))*x^2 + (2 + O(5^20))*x + 5 * 14305114746094 + O(5^20)
-    sage: print("ramification polynomial:", rp)
-    ramification polynomial: (1 + O(5^20))*x^2 + (2 + O(5^20))*x + 5 * 14305114746094 + O(5^20)
-    """
-
-    if nu is None:
-        R = parent(phi)
-        x = R.gen()
-        nu = x
+    Ramification polygon and polynomial phi(alpha + nu(alpha) * x)
+    of a nu-Oystein polynomial phi, where alpha is a root of phi.
     
-    n = phi.degree()
+    TESTS: 
+
+    sage: K = Qp(3, prec=20, print_mode = "val-unit") 
+    sage: R.<x> = K[]
+    sage: phi = x^2 + 1  
+
+    sage: S.<z> = K[]
+    sage: nu = z
+
+    sage: L.<alpha> = K.extension(phi)
+    sage: ram_poly, rho = RamificationPoly(phi, nu, alpha)
+
+    sage: print("Ramification polygon points:", ram_poly)
+    Ramification polygon points: [(-1, 0), (-2, 0)]
+    sage: print("Rho polynomial:", rho)
+    Rho polynomial: (1 + O(3^20))*x^2 + (2 + O(3^20))*x
+    """
+    L = alpha.parent()
+    
+    Lx = PolynomialRing(L, 'x')
+    x = Lx.gen()
+    
+    e = phi.degree() // nu.degree()
     nualpha = nu(alpha)
-
-    # formula: rho(x) = phi(alpha + x*nualpha) / nualpha^n
-    R.<x> = PolynomialRing(alpha.parent())
-    rho = phi(alpha + x*nualpha) / (nualpha**n)
-
-    rp = NewtonPolygon([(-i, rho[i].valuation()) for i in range(1, rho.degree() + 1)])
-
-    return rp, rho
+    
+    rho = phi(nualpha * x + alpha) / (nualpha ** e)
+    
+    # newton polygon
+    ramification_polygon = [(-i, rho.coefficient(i).valuation()) for i in range(1, rho.degree() + 1)]
+    
+    return ramification_polygon, rho
 
 def LowerSlopes(f):
     np = f.newton_polygon()
