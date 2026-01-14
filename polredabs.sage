@@ -389,7 +389,7 @@ def LowerVertices(f):
     np = f.newton_polygon()
     return np.lower_vertices()
 
-def ResidualPolynomialOfComponentAbs(phi, nu, alpha, m): # Precision error
+def ResidualPolynomialOfComponentAbs(phi, nu, alpha, m): # Fixed
     """
     The residual polynomial of the segment of the ramfication polygon of phi of slope -m and the
     Hasse Herbrand function of phi at m. alpha is a root of phi and nu(alpha) a uniformizing element 
@@ -416,6 +416,7 @@ def ResidualPolynomialOfComponentAbs(phi, nu, alpha, m): # Precision error
         sage: m = 1
         sage: Sm, cont = ResidualPolynomialOfComponentAbs(phi, nu, alpha, m)
         sage: print(Sm, ",", cont)
+        z^3, 6
 
     """
     # Ramification Poly
@@ -461,12 +462,19 @@ alpha is a root of phi and nu(alpha) a uniformizing element in the extensions ge
     sage: residuals = ResidualPolynomial(phi, nu, alpha)
     sage: for i, r in enumerate(residuals): print(f"Segment {i}: {r}")
     """
-    rp, rho = RamificationPoly(phi, alpha)  
+    rp, rho = ramification_poly_raw(phi, alpha)  
     LX = rho.parent()
     L = LX.base_ring()
     nualpha = nu(alpha)
 
-    RL, lift = L.residue_field()
+    res = L.residue_field()
+    if isinstance(res, (tuple, list)):
+        RL = res[0]
+        lift = res[1]
+    else:
+        RL = res
+        lift = lambda x: L(x)
+
     RLz.<z> = RL[]
 
     slopes = [-m for m in reversed(LowerSlopes(rp))]
@@ -652,7 +660,7 @@ along with the Eisenstein polynomials that yield the distinguished representativ
     L = K.extension(phi, names=('alpha',))
     alpha = L.gen()
 
-    rp, rho = RamificationPoly(phi, alpha)
+    rp, rho = ramification_poly_raw(phi, alpha)
 
     slopes = list(reversed([-m for m in LowerSlopes(rp)]))
     vertices = list(reversed(LowerVertices(rp)))
@@ -703,7 +711,7 @@ along with the Eisenstein polynomials that yield the distinguished representativ
         LX = PolynomialRing(L, 'X')
         X = LX.gen()
 
-        rp, _ = RamificationPoly(phi, alpha)
+        rp, _ = ramification_poly_raw(phi, alpha)
 
         slopes = list(reversed([-m for m in LowerSlopes(rp)]))
         vertices = list(reversed(LowerVertices(rp)))
@@ -948,23 +956,3 @@ def Contraction2(L, nu):
             c = sum(p**j * L[i][j](R.gen()) for j in range(len(L[i])))
             coeffs.append(c)
         return Rx(coeffs)
-
-def RamificationPoly(phi, alpha):
-    """
-    Absolute ramification polygon and polynomial phi(alpha+x) of a polynomial phi in Eisenstein form, where alpha is a root of phi
-
-    sage: K = Qp(5, 20)
-    sage: R.<x> = PolynomialRing(K)
-    sage: phi = x^3 + 5*x + 5      
-    sage: alpha = phi.roots()[0][0]   
-    sage: RamificationPoly(phi, alpha)
-    """
-
-    L = alpha.parent()
-    Lx = PolynomialRing(L, 'x')
-    x = Lx.gen()
-
-    rho = Lx(phi)(x + alpha)
-    ramification_polygon = rho.newton_polygon()
-
-    return ramification_polygon, rho
