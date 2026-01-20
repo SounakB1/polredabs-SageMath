@@ -91,6 +91,25 @@ def conway_or_jr_polynomial(K, n): # Done (prob won't fix signature for p instea
     except Exception:
         return unram_pol_jr(p, n)
 
+def is_conway_or_jr(nu):
+    """
+    EXAMPLES:
+
+        sage: K = GF(7)
+        sage: R.<x> = K[]
+        sage: conway_or_jr_polynomial(K, 3)
+        x^3 + 6*x^2 + 4
+
+        sage: a = x^3 + 6*x^2 + 4
+        sage: is_conway_or_jr(a)
+        True
+
+        sage: b = x^3 + 5*x
+        sage: is_conway_or_jr(b)
+        False
+    """
+    return conway_or_jr_polynomial(nu.parent(), nu.degree()) == nu
+
 def residue_factor(phi, p): # Done
     """
     EXAMPLES:
@@ -171,35 +190,32 @@ def is_eisenstein_form(phi): # Done
         sage: is_eisenstein_form(phi)
         False
     """
-    R = phi.parent()
-    K = R.base_ring()
-
-    if not hasattr(K, "prime"):
-        return False
-
-    p = K.prime()  
-
-    nu = residue_factor(phi, p)
-    if isinstance(nu, str): # error in res_factor
-        return False
-
-    if nu.leading_coefficient() != 1:
-        return False
-
-    # expansion of phi in powers of nu
-    nuexp = Expansion(phi, nu)
-
-    coeffs0 = nuexp[0].coefficients()
-    vals0 = [a.valuation() for a in coeffs0]
-    if len(vals0) == 0 or min(vals0) != 1:
+    K = phi.base_ring()
+    if K.degree() != 1:
         return False
         
-    for i in range(1, len(nuexp)):
-        for a in nuexp[i].coefficients():
-            if a.valuation() < 1:
-                return False
-
-    return True
+    nu = residue_factor(phi, K.prime())
+    if nu == 0:
+        return False
+        
+    if not nu.is_monic():
+        return False
+        
+    nu_poly = K['x'](nu) 
+    nuexp = Expansion(phi, nu_poly)
+    
+    coeffs_v = [a.valuation() for a in nuexp[0].coefficients()]
+    if not coeffs_v or min(coeffs_v) != 1:
+        return False
+        
+    for poly in nuexp[:-1]:
+        if any(a.valuation() < 1 for a in poly.coefficients()):
+            return False
+            
+    if not conway:
+        return True
+    else:
+        return is_conway_or_jr(nu)
 
 def eisenstein_form(L, K): # Fixed
     """
@@ -280,8 +296,23 @@ def EisensteinForm_poly(f, K): # Magma testing problem, will test sage stuff aft
         sage: R.<x> = K[]
         sage: f = x^2 + x + 2   # irreducible mod 5, not Eisenstein
         sage: phi, nu, gamma = EisensteinForm_poly(f, K)
+
+        sage: print("phi:", phi)
+        phi: (1 + O(5))*x^2 + (4 + O(5))*x + 2 + O(5)
+        sage: print("nu:", nu)
+        nu: (1 + O(5))*x^2 + (4 + O(5))*x + 2 + O(5)
+        sage: print("gamma:", gamma)
+        gamma: (beta + 1) + O(5)
         sage: is_eisenstein_form(phi)
-        # sage returning false
+        False
+
+        sage: K = Qp(5, prec=20)
+        sage: R.<x> = K[]
+        sage: f = x^3 + 5*x + 5  # Eisenstein, should return itself
+        sage: g = EisensteinForm_poly(f, K)
+        sage: g # currently error degree of modulus
+        x^3 + 5*x + 5
+        sage: is_eisenstein_form(g)
 
         sage: K = Qp(5, prec=20)
         sage: R.<x> = K[]
@@ -416,7 +447,6 @@ def ResidualPolynomialOfComponentAbs(phi, nu, alpha, m): # Fixed
         sage: Sm, cont = ResidualPolynomialOfComponentAbs(phi, nu, alpha, m)
         sage: print(Sm, ",", cont)
         z^3, 6
-
     """
     # Ramification Poly
     rp, rho = ramification_poly_raw(phi, alpha)
@@ -529,7 +559,6 @@ def Distinguished(M, nu=None):
     sage: M = {phi1, phi2, phi3}
     sage: phi_dist = Distinguished(M)
     sage: print(phi_dist)
-
     """
     
     L = list(M)
