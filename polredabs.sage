@@ -340,10 +340,10 @@ def EisensteinForm_poly(f, K): # Gotta do oystein_poly_om for non-prime ring cas
 
     fac = f.factor()
     if len(fac) != 1:
-        print("Not irreducible.")
+        print("Polynomial given not irreducible.")
         return 0
     residue_deg = fac[0][0].degree()
-    print(residue_deg)
+    # print(residue_deg)
 
     poly_for_U = conway_or_jr_polynomial(RL, residue_deg)
     U = L.extension(poly_for_U, 'u')
