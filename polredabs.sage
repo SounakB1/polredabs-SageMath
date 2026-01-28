@@ -352,7 +352,7 @@ def EisensteinForm_poly(f, K): # Gotta do oystein_poly_om for non-prime ring cas
     Ls = [U.extension(g[0], 'zeta') for g in fac2]
     return eisenstein_form(Ls[0], K)
 
-def EisensteinForm_simple(f):
+def EisensteinForm_simple(f): # Done
     """
     Given f in K[x] irreducible, return a defining Oystein polynomial phi of L=K[x]/(f) 
   along with  the polynomial nu generating the unramified subextensions of 
@@ -361,7 +361,7 @@ def EisensteinForm_simple(f):
     K = f.base_ring()
     return EisensteinForm_poly(f, K)
 
-def ramification_poly_raw(phi, alpha):
+def ramification_poly_raw(phi, alpha): # Done
     # rho:=phi(alpha+x) and the Newton polygon of rho
     L = alpha.parent()
 
@@ -1012,3 +1012,154 @@ def Contraction2(L, nu):
             c = sum(p**j * L[i][j](R.gen()) for j in range(len(L[i])))
             coeffs.append(c)
         return Rx(coeffs)
+
+# Dictionary for montes
+def create_type_level(phi, p, omega=0):
+    """Initializes a TypeLevel record (dictionary)."""
+    Zx = PolynomialRing(ZZ, 'x')
+    phi_lift = Zx(phi)
+    Fq = GF(p**phi.degree(), 'z')
+    return {
+        'Phi': phi_lift,
+        'V': 0,
+        'prode': 1,
+        'prodf': phi.degree(),
+        'Fq': Fq,
+        'FqY': PolynomialRing(Fq, 'Y'),
+        'omega': omega,
+        'slope': 0,
+        'h': 0,
+        'e': 1,
+        'f': 1
+    }
+
+# Montes functions
+
+def Montes(K, p):
+    p = ZZ(p)
+    if not p.is_prime():
+        raise ValueError("p must be prime")
+    
+    Pol = K.defining_polynomial()
+    Pol = Pol.change_ring(ZZ)
+    
+    if not hasattr(K, '_montes_data'):
+        K._montes_data = {
+            'FactorizedPrimes': [],
+            'PrimeIdeals': {},
+            'LocalIndex': {},
+            'TreesIntervals': {}
+        }
+    
+    if p in K._montes_data['FactorizedPrimes']:
+        return
+
+    om_reps, trees_intervals, total_index = Montes_Poly(Pol, p)
+    
+    pos = 1
+    for i, P in enumerate(om_reps):
+        P['Parent'] = K
+        P['IsPrime'] = True
+        P['IsIntegral'] = True
+        P['Position'] = pos
+        
+        P['PSI'] = P['Type'][-1]['Fq'].defining_polynomial()
+        P['Factorization'] = [[p, pos, 1]]
+        
+        psi_poly = P['Type'][-1]['Phi']
+        K_elt = K(psi_poly)
+        P['LocalGenerator'] = K_elt
+        
+        pos += 1
+
+    K._montes_data['PrimeIdeals'][p] = om_reps
+    K._montes_data['LocalIndex'][p] = total_index
+    K._montes_data['TreesIntervals'][p] = trees_intervals
+
+    K._montes_data['FactorizedPrimes'].append(p)
+    K._montes_data['FactorizedPrimes'].sort()
+
+def Montes_Poly(Pol, p):
+    """
+    The engine: implements Montes(Pol, p : NumberField:=true)
+    """
+    total_index = 0
+    om_reps = []
+    trees_intervals = []
+    
+    Fp = GF(p)
+    Fpx = PolynomialRing(Fp, 'y')
+    fa = Fpx(Pol).factor()
+    
+    pos = 1
+    for factor, mult in fa:
+        # initial
+        level0 = create_type_level(factor.lift(), p, omega=mult)
+        leaf = {'IntegerGenerator': p, 'Type': [level0]}
+        
+        # now run montesloop
+        res_leaves, idx = MontesLoop(Pol, [leaf], total_index, Infinity)
+        
+        interval = list(range(pos, pos + len(res_leaves)))
+        trees_intervals.append(interval)
+        om_reps.extend(res_leaves)
+        total_index += idx
+        pos += len(res_leaves)
+        
+    return om_reps, trees_intervals, total_index
+
+def MontesLoop(Pol, Leaves, totalindex, mahler):
+    p = Leaves[0]['IntegerGenerator']
+    Stack = list(Leaves)
+    Leaves = []
+    
+    while Stack and totalindex <= mahler:
+        omrep = Stack.pop()
+        r = len(omrep['Type'])
+        current_type = omrep['Type'][-1]
+        phi_r = current_type['Phi']
+        omega = current_type['omega']
+        
+        phiadic = Expansion(Pol, phi_r)
+
+        pts = []
+        for i, c in enumerate(phiadic):
+            if i > omega: break
+            if c != 0:
+                val = c.valuation(p)
+                pts.append((i, val))
+        
+        from sage.geometry.newton_polygon import NewtonPolygon
+        np = NewtonPolygon(pts)
+        sides = np.edges()
+        
+        # Negative slope
+        valid_sides = [s for s in sides if s.slope() < 0]
+        
+        if omega == 1 or (valid_sides and valid_sides[0].vertices()[0][0] == 1):
+            if valid_sides:
+                current_type['slope'] = -valid_sides[0].slope()
+            else:
+                current_type['slope'] = Infinity
+            
+            Leaves.append(omrep)
+            continue
+            
+        for side in reversed(valid_sides):
+            h = -ZZ(side.slope().numerator())
+            e = side.slope().denominator()
+            
+            Fq = current_type['Fq']
+            FqY = current_type['FqY']
+            
+            # so omrep doesn't change
+            new_om = copy.deepcopy(omrep)
+            new_om['Type'][-1]['h'] = h
+            new_om['Type'][-1]['e'] = e
+            
+            Stack.append(new_om)
+            
+    return Leaves, totalindex
+
+def PrescribedValue(ideal, value):
+    return ideal['Type'][-1]['Phi'], [0]
