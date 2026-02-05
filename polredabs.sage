@@ -1163,3 +1163,84 @@ def MontesLoop(Pol, Leaves, totalindex, mahler):
 
 def PrescribedValue(ideal, value):
     return ideal['Type'][-1]['Phi'], [0]
+
+def oystein_poly_om(phi):
+    """
+    """
+
+    Zp = phi.base_ring()
+    p = Zp.prime()
+    prec = Zp.precision()
+
+    ZX = PolynomialRing(ZZ, 'X')
+    QX = PolynomialRing(QQ, 'X')
+    phiZ = ZX(phi)
+    phiQ = QX(phi)
+
+    K = NumberField(phiZ, 'a')
+    Montes(K, p)
+    P = K._montes_data['PrimeIdeals'][p][0]
+
+    # discriminant bound
+    D = K.discriminant().valuation(p) - 2 * K._montes_data['LocalIndex'][p]
+
+    e = P['Type'][-1]['e']
+    f = P['Type'][-1]['f']
+
+    newprec = max(prec, 2 * ((D // f) - e + 1))
+    Zpp = Qp(p, prec=newprec)
+
+    Rpp.<x> = PolynomialRing(Zpp)
+    phip = Rpp(phi)
+
+    if f == 1:
+        piK = P['LocalGenerator']
+        pi = QX(list(piK))
+        psi = phip.charpoly(pi)
+        L = Zpp.extension(psi, 'a')
+        return psi, x, L.gen()
+    # If unramified
+    nu = conway_or_jr_polynomial(Zpp.residue_field(), f)
+    nu = nu.change_ring(Zpp)
+
+    kp = Zpp.residue_field()
+    Rkp.<z> = PolynomialRing(kp)
+    nubar = Rkp(nu)
+
+    roots = nubar.roots()
+    gamma_bar = roots[0][0]
+    gamma = Zpp(gamma_bar)
+
+    dnu = nu.derivative()
+    den = dnu(gamma)
+    _, invden, _ = xgcd(QX(den), phiQ)
+
+    piK = P['LocalGenerator']
+    pi = QX(list(piK))
+
+    alpha = (gamma - (nu(gamma) - pi) * invden) % phiQ
+
+    Phi = phip.charpoly(alpha)
+
+    U = Zpp.extension(nu, 'u')
+    Uy.<y> = PolynomialRing(U)
+
+    RU = U.residue_field()
+    RUz.<z> = PolynomialRing(RU)
+
+    Phy = Uy(Phi)
+
+    psi0 = z - RU.gen()
+    nupsi0 = nu // psi0
+
+    facs = hensel_lift_factorization(
+        Phy,
+        [(Uy(psi0))**e, (Uy(nupsi0))**e]
+    )
+
+    psi = facs[0]
+
+    L = U.extension(psi(y + U.gen()), 'a')
+    alpha = L.gen()
+
+    return Phi, nu, alpha
