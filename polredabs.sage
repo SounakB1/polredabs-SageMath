@@ -2528,3 +2528,44 @@ def PolRedPadicTame(phi):
 
     psi = x^e0 + pi * K(xi^r)
     return psi
+
+def PolRedPadicTame_with_nu(Phi, nu, alpha, distinguished=True, conjugates="auto"):
+    K = Phi.base_ring()
+    R.<x> = PolynomialRing(K)
+
+    L = alpha.parent()
+    Ly.<y> = PolynomialRing(L)
+
+    if conjugates == "auto":
+        conjugates = (nu.degree() != 1)
+
+    pi = K.uniformizer()
+    p = L.prime()
+
+    phi = L.defining_polynomial()
+    Lr = phi.base_ring()
+    Lrx.<t> = PolynomialRing(Lur)
+
+    U = Lr.residue_field()
+
+    e0 = phi.degree()
+
+    phis = {phi}
+
+    M = set()
+
+    for tauphi in phis:
+        psi = PolRedPadicTame(tauphi)
+
+        if nu.degree() == 1:
+            M.add(psi)
+        else:
+            psi0 = psi.constant_coefficient()
+
+            psi01 = U(psi0 / pi)
+            psi01_coeffs = psi01.list()
+
+            Psi01 = R(psi01_coeffs)
+
+            Psi = nu**e0 + p * Psi01
+            M.add(Psi)
