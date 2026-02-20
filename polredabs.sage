@@ -910,7 +910,7 @@ def IsMono(f):
     """
     True if the polynomial f is a monomial.
 
-    EXAMPLES: 
+    EXAMPLES:
 
     sage: R.<x> = PolynomialRing(QQ)
     sage: f = 3*x^2
