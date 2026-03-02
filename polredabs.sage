@@ -910,7 +910,7 @@ def IsMono(f):
     """
     True if the polynomial f is a monomial.
 
-    EXAMPLES:
+    EXAMPLES: 
 
     sage: R.<x> = PolynomialRing(QQ)
     sage: f = 3*x^2
@@ -984,34 +984,6 @@ def Expansion2(f, nu, limit=0):
         expexp[i] = expexp[i] + [0] * (maxlen - len(expexp[i]) + 1)
 
     return expexp, nuexp
-
-def Contraction2(L, nu):
-    """
-    Contraction2(Expansion2(f,nu),nu) = f
-
-    EXAMPLES:
-
-    sage: R.<x> = PolynomialRing(Qp(3,8))
-    sage: nu = x
-    sage: L = [[2], [1,1], [0,0,1]]
-    sage: print(Contraction2(L, nu))
-    """
-
-    Rx = nu.parent()
-    R = Rx.base_ring()
-    p = R.prime()
-
-    # Coefs ints
-    if R == R.prime_subring():
-        return Rx(sum(sum((p**(j) * L[i][j] for j in range(len(L[i])))) * nu**i for i in range(len(L))))
-
-    # Degree(nu) = 1, coefficients polys
-    if nu.degree() == 1:
-        coeffs = []
-        for i in range(len(L)):
-            c = sum(p**j * L[i][j](R.gen()) for j in range(len(L[i])))
-            coeffs.append(c)
-        return Rx(coeffs)
 
 # Dictionary for montes
 def create_type_level(phi, p, omega=0):
@@ -2179,58 +2151,6 @@ def IsMono(f):
 
     return ret
 
-def Expansion2(f, nu, limit=0):
-    """
-    The nu-expansion of f such that its coefficients are given as p expansions and the nu-expansion of f.
-
-    EXAMPLES:
-
-    sage: Qp5 = Qp(5, prec=6)
-    sage: Qp5.prime = lambda: 5
-    sage: Qp5.precision = lambda: 6
-    sage: R.<x> = PolynomialRing(Qp5)
-    sage: f = 3+5*x+25*x^2
-    sage: nu = x
-    sage: Expansion2(f, nu)
-
-    """
-
-    K = f.parent().base_ring()
-    if limit == 0:
-        limit = K.precision()
-
-    Zx = PolynomialRing(ZZ, 'x')
-
-    nuexp = Expansion(f, nu)
-
-    p = K.prime()
-
-    if nu.degree() > 1:
-        expansion = [Zx(a) for a in nuexp]
-    else:
-        expansion = [Zx(a.constant_coefficient().list()) for a in nuexp]
-
-    expexp = []
-
-    for g in expansion:
-        h = g
-        gel = []
-        c = 0
-
-        while (h != 0) and (c <= limit):
-            gel.append(h % p)
-            h = h // p     # integer division
-            c += 1
-
-        expexp.append(gel)
-
-    maxlen = max(max(len(gel) for gel in expexp), limit)
-
-    for i in range(len(expexp)):
-        expexp[i] = expexp[i] + [0] * (maxlen - len(expexp[i]) + 1)
-
-    return expexp, nuexp
-
 def Contraction2(L, nu):
     """
     Contraction2(Expansion2(f,nu),nu) = f
@@ -2526,46 +2446,154 @@ def PolRedPadicTame(phi):
     b = gcd(e0, p - 1)
     r = l % b
 
-    psi = x^e0 + pi * K(xi^r)
+    psi = x**e0 + pi * K(xi^r)
     return psi
 
-def PolRedPadicTame_with_nu(Phi, nu, alpha, distinguished=True, conjugates="auto"):
+def pol_red_padic_sub(Phi, nu, alpha, psi01):
+    """
+    Phi in K[x]
+    nu generates unramified subextension of L = K[x]/(Phi)
+    alpha root of Phi
+    psi01 desired constant coefficient mod pi^2
+    """
+
+    n = Phi.degree()
+    f = nu.degree()
+    e = n // f
+
     K = Phi.base_ring()
-    R.<x> = PolynomialRing(K)
+    p = K.prime()
+    Zp = K.integer_ring()
 
+    # Residue field of K
+    RK = K.residue_field()
+
+    # Polynomial ring over K
+    Kx = Phi.parent()
+
+    # Field L = K(alpha)
     L = alpha.parent()
-    Ly.<y> = PolynomialRing(L)
 
-    if conjugates == "auto":
-        conjugates = (nu.degree() != 1)
+    # Residue field of L
+    RL = L.residue_field()
+    Fp = RL.base_field()
 
-    pi = K.uniformizer()
-    p = L.prime()
+    xi = RL.gen()
 
-    phi = L.defining_polynomial()
-    Lr = phi.base_ring()
-    Lrx.<t> = PolynomialRing(Lur)
+    # uniformizer
+    Pi = nu(alpha)
 
-    U = Lr.residue_field()
+    A_phi = ResidualPolys(Phi)
 
-    e0 = phi.degree()
+    rp, rho = RamificationPoly(Phi, nu, alpha)
+    slopes = [s for s in rp.lower_slopes() if abs(s) < Zp.precision_absolute()]
+    maxslope = max(slopes)
+    easystart = floor(maxslope) + 2
 
-    phis = {phi}
+    Smax, PHImax = ResidualPolynomialOfComponentAbs(Phi, nu, alpha, easystart - 1)
+    easylimit = PHImax // e + 1
 
-    M = set()
+    # -------------------------------------------------
+    # Easy reduction
+    # -------------------------------------------------
 
-    for tauphi in phis:
-        psi = PolRedPadicTame(tauphi)
+    def easyreduce(phi):
+        m = easystart
+        nuexp = Expansion2(phi, nu, limit=easylimit)
 
-        if nu.degree() == 1:
-            M.add(psi)
-        else:
-            psi0 = psi.constant_coefficient()
+        while True:
+            wm = PHImax + m - easystart
+            i = wm % e
+            k = wm // e
 
-            psi01 = U(psi0 / pi)
-            psi01_coeffs = psi01.list()
+            if k > easylimit or k >= Zp.precision_absolute():
+                break
 
-            Psi01 = R(psi01_coeffs)
+            nuexp[i][k] = 0
+            m += 1
 
-            Psi = nu**e0 + p * Psi01
-            M.add(Psi)
+        return Contraction2(nuexp, nu)
+
+    nuexp2, nuexp = Expansion2(Phi, nu, limit=easylimit)
+    phi0 = nuexp[0]
+    phi0alpha = phi0(alpha)
+    nualpha = nu(alpha)
+
+    eta = RL((nualpha**e) // p)
+
+    S1, r1 = ResidualPolynomialOfComponentAbs(Phi, nu, alpha, 0)
+    S1eta = eta * S1
+
+    gamma = alpha if alpha.valuation() == 0 else L(xi)
+
+    phi01 = RL(nuexp2[0][1](gamma))
+
+    new_phis = []
+
+    poly_eq = S1eta - (phi01 - RL(psi01))
+    Thetas = [r[0] for r in poly_eq.roots()]
+
+    if not Thetas:
+        raise RuntimeError("PolRedPadic: reduction step slope 1 failed")
+
+    for theta in Thetas:
+
+        new_beta = alpha + L(theta) * nualpha
+        new_phi = new_beta.minpoly()
+
+        new_phis.append((new_phi, new_beta))
+
+        # verification
+        test_val = RL(Expansion2(new_phi, nu)[0][1](gamma))
+        if test_val != RL(psi01):
+            raise RuntimeError("PolRedPadic: reduction step m=1 failed")
+
+    M = new_phis
+
+
+    for m in range(1, easystart):
+
+        new_M = []
+
+        for phi, beta in M:
+
+            nuexp2, nuexp = Expansion2(phi, nu, limit=easylimit)
+
+            nubeta = nu(beta)
+            eta = RL((nubeta**e) / p)
+
+            Am, PHIm = ResidualPolynomialOfComponentAbs(phi, nu, beta, m)
+
+            i = PHIm % e
+            k = PHIm // e
+
+            phisik = nuexp2[i][k]
+
+            gamma = RL(beta) if beta.valuation() == 0 else RL.gen()
+            phisikbeta = phisik(gamma)
+
+            # linear algebra reduction
+            FB = RL.vector_space(Fp).basis()
+
+            FM = matrix(Fp, [(eta**k * Am)(b).vector() for b in FB])
+
+            vdelta = vector(Fp, phisikbeta.vector())
+
+            Mecho = FM.echelon_form()
+
+            delta = RL(list(vdelta))
+
+            sol = FM.solve_right(vector(Fp, phisikbeta.vector()))
+            theta = RL(list(sol))
+
+            Thetas = [theta + RL(list(a)) for a in FM.right_kernel().basis()]
+
+            for theta in Thetas:
+
+                new_beta = beta + L(theta) * nubeta**(m+1)
+                new_phi = new_beta.minpoly()
+                new_M.append((new_phi, new_beta))
+
+        M = new_M
+
+    return {easyreduce(phi) for phi, beta in M}
