@@ -427,6 +427,62 @@ def LowerVertices(f):
     np = f.newton_polygon()
     return np.lower_vertices()
 
+def ResidualPolys(phi, absolute=False):
+    K = phi.base_ring()
+    Kx = phi.parent()
+    x = Kx.gen()
+
+    if is_eisenstein_form(phi):
+
+        L = K.extension(phi, names=('alpha',))
+        alpha = L.gen()
+
+        nu = x
+
+        return ResidualPolynomial(phi, nu, alpha)
+
+    # -------------------------------------------------
+    # Case 2: absolute = True
+    # -------------------------------------------------
+    elif absolute:
+
+        ef = EisensteinForm_simple(phi)
+
+        if isinstance(ef, (list, tuple)):
+            psi, nu, alpha = ef
+        else:
+            # safety fallback
+            psi = ef
+            L = K.extension(psi, names=('alpha',))
+            alpha = L.gen()
+            nu = psi.parent().gen()
+
+        return ResidualPolynomial(psi, nu, alpha)
+
+    else:
+
+        ef = EisensteinForm_simple(phi)
+
+        if isinstance(ef, (list, tuple)):
+            _, nu, alpha = ef
+        else:
+            raise ValueError("EisensteinForm_simple did not return expected tuple.")
+
+        pi = nu(alpha)
+
+        psi = pi.minpoly()
+
+        K2 = psi.base_ring()
+        K2x = psi.parent()
+        X = K2x.gen()
+
+        psi = K2x(psi)
+
+        L2 = K2.extension(psi, names=('beta',))
+        beta = L2.gen()
+
+        return ResidualPolynomial(psi, X, beta)
+
 def ResidualPolynomialOfComponentAbs(phi, nu, alpha, m): # Fixed
     """
     The residual polynomial of the segment of the ramfication polygon of phi of slope -m and the
@@ -1312,7 +1368,7 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
 
     Pi = nu(alpha)
 
-    A_phi = ResidualPolynomialOfComponentAbs(Phi)
+    A_phi = ResidualPolys(Phi)
 
     rp, rho = RamificationPoly(Phi, nu, alpha)
     slopes = [s for s in rp.lower_slopes() if abs(s) < Zp.precision_absolute()]
@@ -1368,7 +1424,6 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
 
         new_phis.append((new_phi, new_beta))
 
-        # verification
         test_val = RL(Expansion2(new_phi, nu)[0][1](gamma))
         if test_val != RL(psi01):
             raise RuntimeError("PolRedPadic: reduction step m=1 failed")
