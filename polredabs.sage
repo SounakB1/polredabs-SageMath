@@ -2472,7 +2472,7 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
     L = alpha.parent()
 
     RL = L.residue_field()
-    Fp = RL.base_field()
+    Fp = RL.prime_subfield()
 
     xi = RL.gen()
 
