@@ -2465,25 +2465,20 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
     p = K.prime()
     Zp = K.integer_ring()
 
-    # Residue field of K
     RK = K.residue_field()
 
-    # Polynomial ring over K
     Kx = Phi.parent()
 
-    # Field L = K(alpha)
     L = alpha.parent()
 
-    # Residue field of L
     RL = L.residue_field()
-    Fp = RL.prime_subfield()
+    Fp = RL.base_field()
 
     xi = RL.gen()
 
-    # uniformizer
     Pi = nu(alpha)
 
-    A_phi = ResidualPolys(Phi)
+    A_phi = ResidualPolynomialOfComponentAbs(Phi)
 
     rp, rho = RamificationPoly(Phi, nu, alpha)
     slopes = [s for s in rp.lower_slopes() if abs(s) < Zp.precision_absolute()]
@@ -2492,10 +2487,6 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
 
     Smax, PHImax = ResidualPolynomialOfComponentAbs(Phi, nu, alpha, easystart - 1)
     easylimit = PHImax // e + 1
-
-    # -------------------------------------------------
-    # Easy reduction
-    # -------------------------------------------------
 
     def easyreduce(phi):
         m = easystart
@@ -2550,7 +2541,6 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
 
     M = new_phis
 
-
     for m in range(1, easystart):
 
         new_M = []
@@ -2572,7 +2562,6 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
             gamma = RL(beta) if beta.valuation() == 0 else RL.gen()
             phisikbeta = phisik(gamma)
 
-            # linear algebra reduction
             FB = RL.vector_space(Fp).basis()
 
             FM = matrix(Fp, [(eta**k * Am)(b).vector() for b in FB])
