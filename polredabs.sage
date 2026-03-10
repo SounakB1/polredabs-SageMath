@@ -1475,3 +1475,4 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
         M = new_M
 
     return {easyreduce(phi) for phi, beta in M}
+
