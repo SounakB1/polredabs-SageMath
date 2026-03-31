@@ -1073,6 +1073,14 @@ def PolToFieldElt(K, g):
     """
     Evaluates the integer polynomial g at the generator of K, reduced mod the
     defining polynomial.  Equivalent to g(K.gen()) but works over ZZ[x].
+    
+    EXAMPLES:
+    sage: R.<x> = ZZ[]
+    sage: K.<a> = NumberField(x^2 - 2)
+
+    sage: g = x^2 + 3*x + 1
+    sage: elt = PolToFieldElt(K, g)
+
     """
     ZZx = PolynomialRing(ZZ, 'x')
     QQx = PolynomialRing(QQ, 'x')
@@ -1119,9 +1127,9 @@ def Montes_number_field(phi_ZZ, p):
     ZZx = PolynomialRing(ZZ, 'x')
     QQx = PolynomialRing(QQ, 'x')
  
-    K   = NumberField(phi_ZZ, 'a')
-    ZK  = K.maximal_order()
-    p   = ZZ(p)
+    K = NumberField(phi_ZZ, 'a')
+    ZK = K.maximal_order()
+    p = ZZ(p)
  
     # K`LocalIndex[p] = v_p([ZK : Z[a]])
     disc_val = ZZ(K.discriminant()).abs().valuation(p)
@@ -1133,7 +1141,7 @@ def Montes_number_field(phi_ZZ, p):
     local_index = ZZ(idx).valuation(p)
  
     # oystein_poly_om assumes phi is p-adically irreducible
-    pfact  = ZK.factor(p)  
+    pfact = ZK.factor(p)  
     P_sage = pfact[0][0]
     e = ZZ(pfact[0][1]) # ramification index = exponent
     f = ZZ(P_sage.residue_field().degree())
@@ -1174,9 +1182,9 @@ def CharacteristicPoly(phip, alpha_QQ, phi_ZZ, Zpp):
     Compute the characteristic polynomial of alpha (given as a QQ-polynomial
     reduced mod phi_ZZ) acting on Zpp[x]/(phip) by multiplication.
     """
-    QQx  = PolynomialRing(QQ, 'x')
+    QQx = PolynomialRing(QQ, 'x')
     Zppx = PolynomialRing(Zpp, 'x')
-    n    = phi_ZZ.degree()
+    n = phi_ZZ.degree()
  
     # Build the multiplication-by-alpha matrix over QQ, mod phi_ZZ
     phi_QQ = QQx(phi_ZZ)
