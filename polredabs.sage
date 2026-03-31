@@ -1141,7 +1141,7 @@ def Montes_number_field(phi_ZZ, p):
     local_index = ZZ(idx).valuation(p)
  
     # oystein_poly_om assumes phi is p-adically irreducible
-    pfact = ZK.factor(p)  
+    pfact = K.factor(p)  
     P_sage = pfact[0][0]
     e = ZZ(pfact[0][1]) # ramification index = exponent
     f = ZZ(P_sage.residue_field().degree())
