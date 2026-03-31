@@ -1069,236 +1069,129 @@ def Contraction2(L, nu):
             coeffs.append(c)
         return Rx(coeffs)
 
-# Dictionary for montes
-def create_type_level(phi, p, omega=0):
-    """Initializes a TypeLevel record (dictionary)."""
-    Zx = PolynomialRing(ZZ, 'x')
-    phi_lift = Zx(phi)
-    Fq = GF(p**phi.degree(), 'z')
-    return {
-        'Phi': phi_lift,
-        'V': 0,
-        'prode': 1,
-        'prodf': phi.degree(),
-        'Fq': Fq,
-        'FqY': PolynomialRing(Fq, 'Y'),
-        'omega': omega,
-        'slope': 0,
-        'h': 0,
-        'e': 1,
-        'f': 1
-    }
-
-# Montes functions
-
-def Montes(K, p):
-    p = ZZ(p)
-    if not p.is_prime():
-        raise ValueError("p must be prime")
-    
-    Pol = K.defining_polynomial()
-    Pol = Pol.change_ring(ZZ)
-    
-    if not hasattr(K, '_montes_data'):
-        K._montes_data = {
-            'FactorizedPrimes': [],
-            'PrimeIdeals': {},
-            'LocalIndex': {},
-            'TreesIntervals': {}
-        }
-    
-    if p in K._montes_data['FactorizedPrimes']:
-        return
-
-    om_reps, trees_intervals, total_index = Montes_Poly(Pol, p)
-    
-    pos = 1
-    for i, P in enumerate(om_reps):
-        P['Parent'] = K
-        P['IsPrime'] = True
-        P['IsIntegral'] = True
-        P['Position'] = pos
-        
-        P['PSI'] = P['Type'][-1]['Fq'].defining_polynomial()
-        P['Factorization'] = [[p, pos, 1]]
-        
-        psi_poly = P['Type'][-1]['Phi']
-        K_elt = K(psi_poly)
-        P['LocalGenerator'] = K_elt
-        
-        pos += 1
-
-    K._montes_data['PrimeIdeals'][p] = om_reps
-    K._montes_data['LocalIndex'][p] = total_index
-    K._montes_data['TreesIntervals'][p] = trees_intervals
-
-    K._montes_data['FactorizedPrimes'].append(p)
-    K._montes_data['FactorizedPrimes'].sort()
-
-def Montes_Poly(Pol, p):
+def PolToFieldElt(K, g):
     """
-    The engine: implements Montes(Pol, p : NumberField:=true)
+    Evaluates the integer polynomial g at the generator of K, reduced mod the
+    defining polynomial.  Equivalent to g(K.gen()) but works over ZZ[x].
     """
-    total_index = 0
-    om_reps = []
-    trees_intervals = []
-    
-    Fp = GF(p)
-    Fpx = PolynomialRing(Fp, 'y')
-    fa = Fpx(Pol).factor()
-    
-    pos = 1
-    for factor, mult in fa:
-        # initial
-        level0 = create_type_level(factor.lift(), p, omega=mult)
-        leaf = {'IntegerGenerator': p, 'Type': [level0]}
-        
-        # now run montesloop
-        res_leaves, idx = MontesLoop(Pol, [leaf], total_index, Infinity)
-        
-        interval = list(range(pos, pos + len(res_leaves)))
-        trees_intervals.append(interval)
-        om_reps.extend(res_leaves)
-        total_index += idx
-        pos += len(res_leaves)
-        
-    return om_reps, trees_intervals, total_index
+    ZZx = PolynomialRing(ZZ, 'x')
+    QQx = PolynomialRing(QQ, 'x')
+    h = QQx(g) % QQx(K.defining_polynomial())
+    n = K.degree()
+    coeffs = h.padded_list(n)
+    return K(coeffs)
+ 
+def ResidueField(P_data):
+    return P_data['residue_field']
+ 
+def Lift(res_elt, P_data):
+    """
+    Lifts a residue-field element to an element of the number field K.
+ 
+    Magma calls LocalLift then PolToFieldElt.  For our purposes (used in
+    oystein_poly_om to lift roots of nu-bar to K) we just need to represent
+    the residue element as a number-field element.  Since kp = GF(p^f) and
+    the prime ideal P has inertia degree f, we express res_elt in the
+    power basis of GF(p^f) and lift those integer coefficients to K.
+    """
+    K = P_data['number_field']
+    kp = P_data['residue_field']
+    p = P_data['p']
+ 
+    coeffs_Fp = res_elt.polynomial().padded_list(kp.degree())
+ 
+    ZZx = PolynomialRing(ZZ, 'x')
+    g = ZZx([ZZ(c) for c in coeffs_Fp])
+    return PolToFieldElt(K, g)
 
-def MontesLoop(Pol, Leaves, totalindex, mahler):
-    p = Leaves[0]['IntegerGenerator']
-    Stack = list(Leaves)
-    Leaves = []
-    
-    while Stack and totalindex <= mahler:
-        omrep = Stack.pop()
-        r = len(omrep['Type'])
-        current_type = omrep['Type'][-1]
-        phi_r = current_type['Phi']
-        omega = current_type['omega']
-        
-        phiadic = Expansion(Pol, phi_r)
-
-        pts = []
-        for i, c in enumerate(phiadic):
-            if i > omega: break
-            if c != 0:
-                val = c.valuation(p)
-                pts.append((i, val))
-        
-        from sage.geometry.newton_polygon import NewtonPolygon
-        np = NewtonPolygon(pts)
-        sides = np.edges()
-        
-        # Negative slope
-        valid_sides = [s for s in sides if s.slope() < 0]
-        
-        if omega == 1 or (valid_sides and valid_sides[0].vertices()[0][0] == 1):
-            if valid_sides:
-                current_type['slope'] = -valid_sides[0].slope()
-            else:
-                current_type['slope'] = Infinity
-            
-            Leaves.append(omrep)
+def Montes_number_field(phi_ZZ, p):
+    """
+    Runs the Montes algorithm on K = QQ[x]/(phi_ZZ) at the prime p and
+    returns a dict with the prime-ideal data for the unique prime above p.
+ 
+    Montes.m sets:
+        K`PrimeIdeals[p,1]`e → P_data['e']
+        K`PrimeIdeals[p,1]`f → P_data['f']
+        K`LocalIndex[p] → P_data['local_index']
+        K`PrimeIdeals[p,1]`LocalGenerator → P_data['local_generator']
+        ResidueField(P) → P_data['residue_field']
+    """
+    ZZx = PolynomialRing(ZZ, 'x')
+    QQx = PolynomialRing(QQ, 'x')
+ 
+    K   = NumberField(phi_ZZ, 'a')
+    ZK  = K.maximal_order()
+    p   = ZZ(p)
+ 
+    # K`LocalIndex[p] = v_p([ZK : Z[a]])
+    disc_val = ZZ(K.discriminant()).abs().valuation(p)
+    order_Za = K.order(K.gen())
+    try:
+        idx = ZK.index_in(order_Za) # [ZK : Z[a]]
+    except Exception:
+        idx = ZZ(1)
+    local_index = ZZ(idx).valuation(p)
+ 
+    # oystein_poly_om assumes phi is p-adically irreducible
+    pfact  = ZK.factor(p)  
+    P_sage = pfact[0][0]
+    e = ZZ(pfact[0][1]) # ramification index = exponent
+    f = ZZ(P_sage.residue_field().degree())
+ 
+    kp = P_sage.residue_field() 
+ 
+    # We need an element piK of K with v_P(piK) = 1.
+    # SageMath's two-element generators for P are (p, g(a)) where g(a) has v_P = 1 when e > 1, or we use p when e = 1.
+    gens_P = list(P_sage.gens_two()) 
+    piK = None
+    for g_elt in gens_P:
+        g_K = K(g_elt)
+        try:
+            v = P_sage.valuation(ZK(g_K))
+            if v == 1:
+                piK = g_K
+                break
+        except Exception:
             continue
-            
-        for side in reversed(valid_sides):
-            h = -ZZ(side.slope().numerator())
-            e = side.slope().denominator()
-            
-            Fq = current_type['Fq']
-            FqY = current_type['FqY']
-            
-            # so omrep doesn't change
-            new_om = copy.deepcopy(omrep)
-            new_om['Type'][-1]['h'] = h
-            new_om['Type'][-1]['e'] = e
-            
-            Stack.append(new_om)
-            
-    return Leaves, totalindex
-
-def PrescribedValue(ideal, value):
-    return ideal['Type'][-1]['Phi'], [0]
-
-def oystein_poly_om(phi):
+    if piK is None:
+        # Fallback - p has valuation e, use K(p) if e=1
+        piK = K(p) if e == 1 else K(gens_P[-1])
+ 
+    return {
+        'e':               e,
+        'f':               f,
+        'local_index':     local_index,
+        'disc_val':        disc_val,
+        'local_generator': piK,
+        'residue_field':   kp,
+        'number_field':    K,
+        'p':               p,
+        'prime_ideal':     P_sage,
+    }
+ 
+def CharacteristicPoly(phip, alpha_QQ, phi_ZZ, Zpp):
     """
+    Compute the characteristic polynomial of alpha (given as a QQ-polynomial
+    reduced mod phi_ZZ) acting on Zpp[x]/(phip) by multiplication.
     """
-    Zp = phi.base_ring()
-    p = Zp.prime()
-    prec = Zp.precision()
-
-    ZX = PolynomialRing(ZZ, 'X')
-    QX = PolynomialRing(QQ, 'X')
-    phiZ = ZX(phi)
-    phiQ = QX(phi)
-
-    K = NumberField(phiZ, 'a')
-    Montes(K, p)
-    P = K._montes_data['PrimeIdeals'][p][0]
-
-    # discriminant bound
-    D = K.discriminant().valuation(p) - 2 * K._montes_data['LocalIndex'][p]
-
-    e = P['Type'][-1]['e']
-    f = P['Type'][-1]['f']
-
-    newprec = max(prec, 2 * ((D // f) - e + 1))
-    Zpp = Qp(p, prec=newprec)
-
-    Rpp.<x> = PolynomialRing(Zpp)
-    phip = Rpp(phi)
-
-    if f == 1:
-        piK = P['LocalGenerator']
-        pi = QX(list(piK))
-        psi = phip.charpoly(pi)
-        L = Zpp.extension(psi, 'a')
-        return psi, x, L.gen()
-    # If unramified
-    nu = conway_or_jr_polynomial(Zpp.residue_field(), f)
-    nu = nu.change_ring(Zpp)
-
-    kp = Zpp.residue_field()
-    Rkp.<z> = PolynomialRing(kp)
-    nubar = Rkp(nu)
-
-    roots = nubar.roots()
-    gamma_bar = roots[0][0]
-    gamma = Zpp(gamma_bar)
-
-    dnu = nu.derivative()
-    den = dnu(gamma)
-    _, invden, _ = xgcd(QX(den), phiQ)
-
-    piK = P['LocalGenerator']
-    pi = QX(list(piK))
-
-    alpha = (gamma - (nu(gamma) - pi) * invden) % phiQ
-
-    Phi = phip.charpoly(alpha)
-
-    U = Zpp.extension(nu, 'u')
-    Uy.<y> = PolynomialRing(U)
-
-    RU = U.residue_field()
-    RUz.<z> = PolynomialRing(RU)
-
-    Phy = Uy(Phi)
-
-    psi0 = z - RU.gen()
-    nupsi0 = nu // psi0
-
-    facs = hensel_lift_factorization(
-        Phy,
-        [(Uy(psi0))**e, (Uy(nupsi0))**e]
-    )
-
-    psi = facs[0]
-
-    L = U.extension(psi(y + U.gen()), 'a')
-    alpha = L.gen()
-
-    return Phi, nu, alpha
+    QQx  = PolynomialRing(QQ, 'x')
+    Zppx = PolynomialRing(Zpp, 'x')
+    n    = phi_ZZ.degree()
+ 
+    # Build the multiplication-by-alpha matrix over QQ, mod phi_ZZ
+    phi_QQ = QQx(phi_ZZ)
+    alpha_red = QQx(alpha_QQ) % phi_QQ
+ 
+    # Column j = (x^j * alpha_red) mod phi_QQ, written in basis {1,x,...,x^{n-1}}
+    cols = []
+    for j in range(n):
+        col = (QQx.gen()**j * alpha_red) % phi_QQ
+        cols.append(col.padded_list(n))
+ 
+    M = matrix(QQ, n, n, [cols[j][i] for i in range(n) for j in range(n)])
+    char_QQ = M.charpoly()
+ 
+    return Zppx([Zpp(c) for c in char_QQ.list()])
 
 def PolRedPadicTame(phi):
     """
@@ -1338,141 +1231,3 @@ def PolRedPadicTame(phi):
 
     psi = x**e0 + pi * K(xi^r)
     return psi
-
-def pol_red_padic_sub(Phi, nu, alpha, psi01):
-    """
-    Phi in K[x]
-    nu generates unramified subextension of L = K[x]/(Phi)
-    alpha root of Phi
-    psi01 desired constant coefficient mod pi^2
-    """
-
-    n = Phi.degree()
-    f = nu.degree()
-    e = n // f
-
-    K = Phi.base_ring()
-    p = K.prime()
-    Zp = K.integer_ring()
-
-    RK = K.residue_field()
-
-    Kx = Phi.parent()
-
-    L = alpha.parent()
-
-    RL = L.residue_field()
-    Fp = RL.prime_subfield()
-
-    xi = RL.gen()
-
-    Pi = nu(alpha)
-
-    A_phi = ResidualPolys(Phi)
-
-    rp, rho = RamificationPoly(Phi, nu, alpha)
-    slopes = [s for s in rp.lower_slopes() if abs(s) < Zp.precision_absolute()]
-    maxslope = max(slopes)
-    easystart = floor(maxslope) + 2
-
-    Smax, PHImax = ResidualPolynomialOfComponentAbs(Phi, nu, alpha, easystart - 1)
-    easylimit = PHImax // e + 1
-
-    def easyreduce(phi):
-        m = easystart
-        nuexp = Expansion2(phi, nu, limit=easylimit)
-
-        while True:
-            wm = PHImax + m - easystart
-            i = wm % e
-            k = wm // e
-
-            if k > easylimit or k >= Zp.precision_absolute():
-                break
-
-            nuexp[i][k] = 0
-            m += 1
-
-        return Contraction2(nuexp, nu)
-
-    nuexp2, nuexp = Expansion2(Phi, nu, limit=easylimit)
-    phi0 = nuexp[0]
-    phi0alpha = phi0(alpha)
-    nualpha = nu(alpha)
-
-    eta = RL((nualpha**e) // p)
-
-    S1, r1 = ResidualPolynomialOfComponentAbs(Phi, nu, alpha, 0)
-    S1eta = eta * S1
-
-    gamma = alpha if alpha.valuation() == 0 else L(xi)
-
-    phi01 = RL(nuexp2[0][1](gamma))
-
-    new_phis = []
-
-    poly_eq = S1eta - (phi01 - RL(psi01))
-    Thetas = [r[0] for r in poly_eq.roots()]
-
-    if not Thetas:
-        raise RuntimeError("PolRedPadic: reduction step slope 1 failed")
-
-    for theta in Thetas:
-
-        new_beta = alpha + L(theta) * nualpha
-        new_phi = new_beta.minpoly()
-
-        new_phis.append((new_phi, new_beta))
-
-        test_val = RL(Expansion2(new_phi, nu)[0][1](gamma))
-        if test_val != RL(psi01):
-            raise RuntimeError("PolRedPadic: reduction step m=1 failed")
-
-    M = new_phis
-
-    for m in range(1, easystart):
-
-        new_M = []
-
-        for phi, beta in M:
-
-            nuexp2, nuexp = Expansion2(phi, nu, limit=easylimit)
-
-            nubeta = nu(beta)
-            eta = RL((nubeta**e) / p)
-
-            Am, PHIm = ResidualPolynomialOfComponentAbs(phi, nu, beta, m)
-
-            i = PHIm % e
-            k = PHIm // e
-
-            phisik = nuexp2[i][k]
-
-            gamma = RL(beta) if beta.valuation() == 0 else RL.gen()
-            phisikbeta = phisik(gamma)
-
-            FB = RL.vector_space(Fp).basis()
-
-            FM = matrix(Fp, [(eta**k * Am)(b).vector() for b in FB])
-
-            vdelta = vector(Fp, phisikbeta.vector())
-
-            Mecho = FM.echelon_form()
-
-            delta = RL(list(vdelta))
-
-            sol = FM.solve_right(vector(Fp, phisikbeta.vector()))
-            theta = RL(list(sol))
-
-            Thetas = [theta + RL(list(a)) for a in FM.right_kernel().basis()]
-
-            for theta in Thetas:
-
-                new_beta = beta + L(theta) * nubeta**(m+1)
-                new_phi = new_beta.minpoly()
-                new_M.append((new_phi, new_beta))
-
-        M = new_M
-
-    return {easyreduce(phi) for phi, beta in M}
-
