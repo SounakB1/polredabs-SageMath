@@ -1349,8 +1349,8 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
     new_phis = set()
     for theta in Thetas:
         new_beta = alpha + L(theta) * nualpha
-        new_phi  = new_beta.minpoly(K)   # characteristic polynomial over K
-        new_phi  = Kx(new_phi)
+        new_phi = new_beta.minpoly(K)   # characteristic polynomial over K
+        new_phi = Kx(new_phi)
         if is_eisenstein_form(Phi):
             if ResidualPolynomial(new_phi, nu, new_beta) == A_phi:
                 new_phis.add((new_phi, new_beta))
@@ -1415,7 +1415,7 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
  
             for theta in Thetas_m:
                 new_beta2 = beta + L(theta) * nubeta**(m + 1)
-                new_phi2  = Kx(new_beta2.minpoly(K))
+                new_phi2 = Kx(new_beta2.minpoly(K))
                 new_M.add((new_phi2, new_beta2))
  
         M = new_M
@@ -1641,4 +1641,3 @@ def PolRedPadic_ZZ(f, p, prec=300, distinguished=True):
     Phi = ZpX(f)
     Psi = PolRedPadic(Phi, Zp, distinguished=distinguished, conjugates="auto")
     return Psi
- 
