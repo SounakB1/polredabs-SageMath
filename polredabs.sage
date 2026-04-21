@@ -1286,7 +1286,7 @@ def pol_red_padic_sub(Phi, nu, alpha, psi01):
     L = alpha.parent()
     Lt = PolynomialRing(L, 't')
  
-    RL, LtoRL = L.residue_field(True)  # (field, map L -> RL)
+    RL, LtoRL = L.residue_field(True)  
     Fp = RL.prime_subfield()
     RLz = PolynomialRing(RL, 'z')
  
@@ -1490,11 +1490,6 @@ def PolRedPadicTame_full(Phi, nu, alpha, distinguished=True, conjugates="auto"):
     if distinguished:
         return Distinguished(M, nu=nu if nu.degree() != 1 else None)
     return M
- 
- 
-###############################################################################
-# PolRedPadic  (main overloads)
-###############################################################################
  
 def PolRedPadic_full(Phi, nu, alpha, distinguished=True, conjugates="auto"):
     """
