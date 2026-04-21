@@ -1118,11 +1118,11 @@ def Montes_number_field(phi_ZZ, p):
     returns a dict with the prime-ideal data for the unique prime above p.
  
     Montes.m sets:
-        K`PrimeIdeals[p,1]`e → P_data['e']
-        K`PrimeIdeals[p,1]`f → P_data['f']
-        K`LocalIndex[p] → P_data['local_index']
-        K`PrimeIdeals[p,1]`LocalGenerator → P_data['local_generator']
-        ResidueField(P) → P_data['residue_field']
+        K`PrimeIdeals[p,1]`e -> P_data['e']
+        K`PrimeIdeals[p,1]`f -> P_data['f']
+        K`LocalIndex[p] -> P_data['local_index']
+        K`PrimeIdeals[p,1]`LocalGenerator -> P_data['local_generator']
+        ResidueField(P) -> P_data['residue_field']
     """
     ZZx = PolynomialRing(ZZ, 'x')
     QQx = PolynomialRing(QQ, 'x')
@@ -1239,3 +1239,411 @@ def PolRedPadicTame(phi):
 
     psi = x**e0 + pi * K(xi^r)
     return psi
+ 
+def pol_red_padic_sub(Phi, nu, alpha, psi01):
+    """
+    Given a nu-Oystein polynomial Phi in K[x], a root alpha of Phi in L = K(alpha),
+    and the desired constant coefficient psi01 mod pi^2 (as a residue-field element),
+    Krasner-Monge reduction level by level and return a set of candidate
+    reduced polynomials (each paired with the corresponding root in L).
+    
+    EXAMPLES:
+        sage: K = Qp(3, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^3 + 3
+        sage: L.<alpha> = K.extension(phi)
+        sage: nu = x
+        sage: psi01 = K.residue_field()(1)
+        sage: M = pol_red_padic_sub(phi, R(nu), alpha, psi01)
+        sage: print(len(M))
+ 
+        sage: K = Qp(2, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^2 + 2
+        sage: L.<alpha> = K.extension(phi)
+        sage: nu = x
+        sage: psi01 = K.residue_field()(1)
+        sage: M = pol_red_padic_sub(phi, R(nu), alpha, psi01)
+        sage: print(len(M))
+ 
+        sage: K = Qp(5, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^5 + 5
+        sage: L.<alpha> = K.extension(phi)
+        sage: nu = x
+        sage: psi01 = K.residue_field()(1)
+        sage: M = pol_red_padic_sub(phi, R(nu), alpha, psi01)
+        sage: print(len(M))
+    """
+    n = Phi.degree()
+    f = nu.degree()
+    e = n // f
+ 
+    Kx = Phi.parent()
+    K = Kx.base_ring()
+    p = K.prime()
+ 
+    L = alpha.parent()
+    Lt = PolynomialRing(L, 't')
+ 
+    RL, LtoRL = L.residue_field(True)  # (field, map L -> RL)
+    Fp = RL.prime_subfield()
+    RLz = PolynomialRing(RL, 'z')
+ 
+    psi01R = RL(psi01)
+    Pi = nu.change_ring(L)(alpha)   # nu(alpha), the uniformiser of L
+ 
+    A_phi = ResidualPolynomial(Phi, nu, alpha)
+ 
+    # Compute ramification polygon and easy-reduction parameters
+    rp_list, rho = RamificationPoly(Phi, nu, alpha)
+    from sage.geometry.newton_polygon import NewtonPolygon
+    rp = NewtonPolygon(rp_list)
+ 
+    slopes_all = [s for s in rp.slopes() if abs(s) < K.precision_cap()]
+    if not slopes_all:
+        # Totally tame – no wild reduction needed; return Phi unchanged
+        return {(Phi, alpha)}
+ 
+    maxslope = max(slopes_all)
+    easystart = int(floor(maxslope)) + 2
+ 
+    Smax, PHImax = ResidualPolynomialOfComponentAbs(Phi, nu, alpha, easystart - 1)
+    easylimit = PHImax // e + 1
+ 
+    # Helper: set all expansion digits above the easy threshold to zero
+    def easyreduce(phi):
+        nuexp, _ = Expansion2(phi, nu, limit=easylimit)
+        m = easystart
+        while True:
+            wm = PHImax + m - easystart
+            i  = wm % e
+            k  = wm // e
+            if k > easylimit or k >= K.precision_cap():
+                break
+            if k < len(nuexp[i]):
+                nuexp[i][k] = 0
+            m += 1
+        return Contraction2(nuexp, nu)
+ 
+    # m = 0 step
+    nuexp2, nuexp = Expansion2(Phi, nu, limit=easylimit)
+    nualpha = Pi
+    eta = LtoRL(nualpha**e / p)
+    S1, r1 = ResidualPolynomialOfComponentAbs(Phi, nu, alpha, 0)
+    S1eta = eta * S1
+    
+    if alpha.valuation() == 0:
+        gamma = LtoRL(alpha)
+    else:
+        gamma = RL.gen()
+ 
+    phi01 = RL(nuexp2[0][1](gamma) if callable(nuexp2[0][1]) else nuexp2[0][1])
+ 
+    # Roots of S1eta - (phi01 - psi01R) give the required shifts theta
+    target_poly = S1eta - RLz(phi01 - psi01R)
+    Thetas = [r for r, _ in target_poly.roots()]
+    if not Thetas:
+        raise ValueError("pol_red_padic_sub: reduction step m=0 failed (no roots)")
+ 
+    new_phis = set()
+    for theta in Thetas:
+        new_beta = alpha + L(theta) * nualpha
+        new_phi  = new_beta.minpoly(K)   # characteristic polynomial over K
+        new_phi  = Kx(new_phi)
+        if is_eisenstein_form(Phi):
+            if ResidualPolynomial(new_phi, nu, new_beta) == A_phi:
+                new_phis.add((new_phi, new_beta))
+        else:
+            new_phis.add((new_phi, new_beta))
+ 
+    M = new_phis
+ 
+    for m in range(1, easystart):
+        new_M = set()
+        for phi, beta in M:
+            nuexp2_b, nuexp_b = Expansion2(phi, nu, limit=easylimit)
+            nubeta = nu.change_ring(L)(beta)
+            eta_b  = LtoRL(nubeta**e / p)
+ 
+            Am, PHIm = ResidualPolynomialOfComponentAbs(phi, nu, beta, m)
+            i_idx = PHIm % e
+            k_idx = PHIm // e
+ 
+            # phisik: the (i,k) digit of the expansion of phi
+            raw = nuexp2_b[i_idx][k_idx] if k_idx < len(nuexp2_b[i_idx]) else 0
+ 
+            if beta.valuation() == 0:
+                gamma_b = LtoRL(beta)
+            else:
+                gamma_b = RL.gen()
+ 
+            phisikbeta = RL(raw(gamma_b) if callable(raw) else raw)
+ 
+            # Build the image matrix of eta^k * Am to find the reduction
+            FB = RL.basis_over(Fp)
+            FL = [list((eta_b**k_idx * Am)(b)) for b in FB]
+            FM = matrix(Fp, FL)
+ 
+            from sage.geometry.newton_polygon import NewtonPolygon as _NP
+            Mecho = FM.echelon_form()
+            vdelta = vector(Fp, list(phisikbeta)[::-1])
+            jB = 0
+            iB = 0
+            done = False
+            while iB < len(FB) and not done:
+                while Mecho[iB][jB] == 0 and not done:
+                    if jB < len(FB) - 1:
+                        jB += 1
+                    else:
+                        done = True
+                if not done:
+                    vb  = vector(Fp, Mecho[iB])
+                    ab  = vdelta[jB] / vb[jB]
+                    vdelta = vdelta - ab * vb
+                    iB += 1
+ 
+            delta = RL(list(reversed(list(vdelta))))
+ 
+            # Solve FM * sol = phisikbeta - delta for the shift theta
+            rhs = vector(Fp, list(phisikbeta - delta))
+            try:
+                sol, kernel = FM.solve_right(rhs), FM.right_kernel()
+                Thetas_m = [RL(list(sol + k)) for k in kernel.basis()] if kernel.dimension() > 0 else [RL(list(sol))]
+            except Exception:
+                Thetas_m = []
+ 
+            for theta in Thetas_m:
+                new_beta2 = beta + L(theta) * nubeta**(m + 1)
+                new_phi2  = Kx(new_beta2.minpoly(K))
+                new_M.add((new_phi2, new_beta2))
+ 
+        M = new_M
+ 
+    # Apply easy reduction and return the polynomial set
+    return {easyreduce(phibeta[0]) for phibeta in M}
+ 
+ 
+def PolRedPadicTame_full(Phi, nu, alpha, distinguished=True, conjugates="auto"):
+    """
+    Reduction of a tamely ramified Eisenstein polynomial Phi, given the
+    unramified part nu and a root alpha of Phi.  Returns the distinguished
+    reduced polynomial (or a set of candidates if distinguished=False).
+ 
+    EXAMPLES:
+        sage: K = Qp(5, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^3 + 5
+        sage: L.<alpha> = K.extension(phi)
+        sage: psi = PolRedPadicTame_full(phi, R(x), alpha)
+        sage: print(psi)
+ 
+        sage: K = Qp(7, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^5 + 7
+        sage: L.<alpha> = K.extension(phi)
+        sage: psi = PolRedPadicTame_full(phi, R(x), alpha)
+        sage: print(psi)
+ 
+        sage: K = Qp(11, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^3 + 11
+        sage: L.<alpha> = K.extension(phi)
+        sage: psi = PolRedPadicTame_full(phi, R(x), alpha)
+        sage: print(psi)
+    """
+    K  = Phi.base_ring()
+    Kx = Phi.parent()
+    L = alpha.parent()
+    p = L.prime()
+ 
+    if conjugates == "auto":
+        conjugates = (nu.degree() != 1)
+ 
+    # The defining polynomial of L and its base (possibly unramified) ring
+    phi_L = L.defining_polynomial()
+    Lur = phi_L.base_ring()
+    Lurx = PolynomialRing(Lur, 'x')
+    U, LurtoU = Lur.residue_field(True)
+    e0 = phi_L.degree()
+ 
+    if conjugates and nu.degree() != 1:
+        phis_set = {Lurx([tau(c) for c in phi_L.coefficients(sparse=False)])
+                   for tau in Lur.automorphisms()}
+    else:
+        phis_set = {phi_L}
+ 
+    M = set()
+    for tauphi in phis_set:
+        # tame reduction of this conjugate
+        psi = PolRedPadicTame(Lurx(tauphi).change_ring(Lur))
+        if nu.degree() == 1:
+            M.add(psi.change_ring(K))
+        else:
+            psi0 = psi.constant_coefficient()
+            psi01 = LurtoU(psi0 / Lur.uniformizer())
+            # express psi01 in the K-basis and form the K[x] polynomial
+            psi01_K = Kx([K(c) for c in psi01.polynomial().padded_list(nu.degree())])
+            Psi = nu**e0 + psi01_K * p
+            M.add(Psi)
+ 
+    if distinguished:
+        return Distinguished(M, nu=nu if nu.degree() != 1 else None)
+    return M
+ 
+ 
+###############################################################################
+# PolRedPadic  (main overloads)
+###############################################################################
+ 
+def PolRedPadic_full(Phi, nu, alpha, distinguished=True, conjugates="auto"):
+    """
+    Phi in K[x] in Eisenstein form, Phi(alpha) = 0, nu(alpha) uniformizer of K(alpha).
+    Return the Krasner-Monge reduction of Phi.
+ 
+    EXAMPLES:
+        sage: K = Qp(3, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^3 + 3
+        sage: L.<alpha> = K.extension(phi)
+        sage: psi = PolRedPadic_full(phi, R(x), alpha)
+        sage: print(psi)
+ 
+        sage: K = Qp(2, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^4 + 2
+        sage: L.<alpha> = K.extension(phi)
+        sage: psi = PolRedPadic_full(phi, R(x), alpha)
+        sage: print(psi)
+ 
+        sage: K = Qp(5, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^5 + 5
+        sage: L.<alpha> = K.extension(phi)
+        sage: psi = PolRedPadic_full(phi, R(x), alpha)
+        sage: print(psi)
+    """
+    Kx = Phi.parent()
+    K = Kx.base_ring()
+    L = alpha.parent()
+    p = L.prime()
+ 
+    if conjugates == "auto":
+        conjugates = (nu.degree() != 1)
+ 
+    RL, LtoRL = L.residue_field(True)
+    U = L.base_ring() if hasattr(L, 'base_ring') else K
+ 
+    pi = L.uniformizer()
+    psi_L = L.defining_polynomial()
+ 
+    # gamma: root of nu in L  (nu(gamma) = pi)
+    gamma_roots = (nu.change_ring(L) - pi).roots()
+    gamma = gamma_roots[0][0]
+ 
+    # char poly of gamma over the prime subfield of K
+    phi_gamma = gamma.minpoly(K)
+    phi_gamma = Kx(phi_gamma)
+ 
+    # Find distinguished residual polynomial representative
+    A, psis = ResidualPolynomialDistinguished(psi_L, conjugates=conjugates,
+                                              constant_first=True)
+ 
+    M = set()
+    for psi in psis:
+        # Get Eisenstein form of psi
+        ef = EisensteinForm_simple(Kx(psi))
+        if isinstance(ef, (list, tuple)):
+            thisphi, nu_ef, thisalpha = ef
+        else:
+            thisphi  = ef
+            L2 = K.extension(thisphi, names=('a',))
+            thisalpha = L2.gen()
+            nu_ef = thisphi.parent().gen()
+ 
+        psi01 = psi.constant_coefficient() / p
+        # psi01 as a residue-field element
+        psi01_res = RL(psi01) if psi01 in RL else LtoRL(L(psi01))
+ 
+        newphis = pol_red_padic_sub(thisphi, Kx(nu_ef), thisalpha, psi01_res)
+        M |= newphis
+ 
+    if distinguished:
+        return Distinguished(M)
+    return M
+ 
+ 
+def PolRedPadic(Phi, K=None, distinguished=True, conjugates="auto"):
+    """
+    For Phi in O_K irreducible, return a Krasner-Monge reduced polynomial Psi
+    such that K[x]/(Phi) is isomorphic to K[x]/(Psi).
+ 
+    When K is omitted the coefficient ring of Phi is used.  Accepts both
+    p-adic coefficient rings and integer coefficient rings (with a precision
+    keyword available via the integer overload below).
+ 
+    EXAMPLES:
+        sage: K = Qp(3, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^3 + 3*x + 3
+        sage: print(PolRedPadic(phi))
+ 
+        sage: K = Qp(5, prec=20)
+        sage: R.<x> = K[]
+        sage: phi = x^5 + 5*x + 5
+        sage: print(PolRedPadic(phi))
+ 
+        sage: K = Qp(2, prec=30)
+        sage: R.<x> = K[]
+        sage: phi = x^4 + 2*x + 2
+        sage: print(PolRedPadic(phi))
+    """
+    if K is None:
+        K = Phi.base_ring()
+ 
+    p = K.prime()
+ 
+    # Convert to Eisenstein / Oystein form
+    ef = EisensteinForm_simple(Phi.change_ring(K))
+    if isinstance(ef, (list, tuple)):
+        phi, nu, alpha = ef
+    else:
+        phi = ef
+        L = K.extension(phi, names=('a',))
+        alpha = L.gen()
+        nu = phi.parent().gen()
+ 
+    L = alpha.parent()
+ 
+    # Dispatch: tame vs wild
+    if L.ramification_index() % p != 0:
+        M = PolRedPadicTame_full(phi, phi.parent()(nu), alpha, distinguished=distinguished, conjugates=conjugates)
+    else:
+        M = PolRedPadic_full(phi, phi.parent()(nu), alpha, distinguished=distinguished, conjugates=conjugates)
+    return M
+ 
+ 
+def PolRedPadic_ZZ(f, p, prec=300, distinguished=True):
+    """
+    The distinguished reduced generating polynomial of the extension generated
+    by f (a polynomial over ZZ) over Zp.
+ 
+    EXAMPLES:
+        sage: R.<x> = ZZ[]
+        sage: f = x^3 + 3
+        sage: print(PolRedPadic_ZZ(f, 3))
+ 
+        sage: R.<x> = ZZ[]
+        sage: f = x^2 + 2
+        sage: print(PolRedPadic_ZZ(f, 2))
+ 
+        sage: R.<x> = ZZ[]
+        sage: f = x^4 + 5
+        sage: print(PolRedPadic_ZZ(f, 5))
+    """
+    Zp  = Qp(p, prec)   # use Qp for convenience; coefficients land in Zp
+    ZpX = PolynomialRing(Zp, 'X')
+    Phi = ZpX(f)
+    Psi = PolRedPadic(Phi, Zp, distinguished=distinguished, conjugates="auto")
+    return Psi
+ 
