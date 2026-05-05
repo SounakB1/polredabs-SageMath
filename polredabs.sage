@@ -1201,7 +1201,7 @@ def CharacteristicPoly(phip, alpha_QQ, phi_ZZ, Zpp):
  
     return Zppx([Zpp(c) for c in char_QQ.list()])
 
-def PolRedPadicTame(phi):
+def PolRedPadicTame(phi): # Works
     """
     EXAMPLES:
     
